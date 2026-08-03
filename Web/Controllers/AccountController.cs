@@ -1,5 +1,6 @@
 using Application.DTOs.Identity;
 using Application.Interfaces.Services;
+using Application.Models.ViewModels.Account;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Web.Controllers;
@@ -16,28 +17,41 @@ public class AccountController : Controller
     [HttpGet]
     public IActionResult Login()
     {
-        if (User.Identity?.IsAuthenticated == true)
-            return RedirectToAction("Index", "Home");
+      if (User.Identity?.IsAuthenticated == true)
+        {
+          if (User.IsInRole("Administrador"))
+            return RedirectToAction("Index", "Admin");
+            
+          if (User.IsInRole("Cajero"))
+            return RedirectToAction("Index", "Cajero");
+            
+          if (User.IsInRole("Cliente"))
+            return RedirectToAction("Index", "Cliente");
 
-        return View();
+          return RedirectToAction("Index", "Home");
+       }
+
+      return View();
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Login(LoginDto dto)
+    public async Task<IActionResult> Login(LoginViewModel model)
     {
         if (!ModelState.IsValid)
-            return View(dto);
+            return View(model);
 
+        var dto = new LoginDto { UserName = model.UserName, Password = model.Password };
         var result = await _authService.WebLoginAsync(dto);
         if (result.Succeeded)
             return RedirectToAction(result.RedirectAction, result.RedirectController);
 
         ModelState.AddModelError(string.Empty, result.ErrorMessage ?? "Los datos de acceso son inválidos.");
-        return View(dto);
+        return View(model);
     }
 
-    [HttpGet]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
     {
         await _authService.LogoutAsync();
@@ -52,13 +66,13 @@ public class AccountController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ForgotPassword(ForgotPasswordDto dto)
+    public async Task<IActionResult> ForgotPassword(ResetPasswordViewModel model)
     {
         if (!ModelState.IsValid)
-            return View(dto);
+            return View(model);
 
-        var resetLinkFormat = $"{Request.Scheme}://{Request.Host}/Account/ResetPassword?email={{0}}&token={{1}}";
-        await _authService.ForgotPasswordAsync(dto.UserName, resetLinkFormat);
+        var resetLinkFormat = Url.Action("ResetPassword", "Account", new { email = "{0}", token = "{1}" }, Request.Scheme);
+        await _authService.ForgotPasswordAsync(model.UserName, resetLinkFormat!);
 
         ViewBag.Message = "Se ha enviado un enlace de restablecimiento de contraseña al correo electrónico registrado.";
         return View("ForgotPasswordConfirmation");
@@ -70,47 +84,34 @@ public class AccountController : Controller
         if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(email))
             return RedirectToAction("Login");
 
-        ViewBag.Email = email;
-        ViewBag.Token = token;
-        return View();
+        var model = new NewPasswordViewModel { Email = email, Token = token };
+        return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ResetPassword(string email, string token, string newPassword, string confirmPassword)
+    public async Task<IActionResult> ResetPassword(NewPasswordViewModel model)
     {
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(token))
-            return RedirectToAction("Login");
+        if (!ModelState.IsValid)
+            return View(model);
 
-        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
-        {
-            ModelState.AddModelError(string.Empty, "La contraseña debe tener al menos 8 caracteres.");
-            ViewBag.Email = email;
-            ViewBag.Token = token;
-            return View();
-        }
-
-        if (newPassword != confirmPassword)
-        {
-            ModelState.AddModelError(string.Empty, "La contraseña y la confirmación no coinciden.");
-            ViewBag.Email = email;
-            ViewBag.Token = token;
-            return View();
-        }
-
-        var result = await _authService.ResetPasswordAsync(email, token, newPassword);
+        var result = await _authService.ResetPasswordAsync(model.Email, model.Token, model.Password);
         if (!result.Succeeded)
         {
             foreach (var error in result.Errors)
                 ModelState.AddModelError(string.Empty, error.Description);
 
-            ViewBag.Email = email;
-            ViewBag.Token = token;
-            return View();
+            return View(model);
         }
 
         ViewBag.Message = "Su contraseña ha sido restablecida correctamente. Ya puede iniciar sesión.";
         return View("ResetPasswordConfirmation");
+    }
+
+    [HttpGet]
+    public IActionResult AccessDenied()
+    {
+      return View();
     }
 
     [HttpGet]

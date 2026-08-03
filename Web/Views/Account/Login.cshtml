@@ -1,0 +1,71 @@
+@model Application.Models.ViewModels.Account.LoginViewModel
+@{
+    ViewData["Title"] = "Iniciar Sesión";
+    Layout = "~/Views/Shared/_HomeLayout.cshtml";
+}
+
+<div class="text-center mb-4">
+    <div class="d-inline-block p-3 rounded-circle mb-3 brand-icon-badge">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 21h18"></path><path d="M3 10h18"></path><path d="M5 6l7-3 7 3"></path><path d="M4 10v11"></path><path d="M20 10v11"></path><path d="M8 14v3"></path><path d="M12 14v3"></path><path d="M16 14v3"></path>
+        </svg>
+    </div>
+    <h2 class="font-weight-bold tracking-wide">Artemis Banking Pro</h2>
+    <p class="text-white small opacity-90">Accede a tu inteligencia financiera</p>
+</div>
+
+<div class="auth-container">
+    <form asp-action="Login" method="post">
+        @Html.AntiForgeryToken()
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="alert alert-danger mb-4" style="background-color: var(--error-bg); border: 1px solid #4A2531; color: var(--error-text); border-radius: 8px; padding: 10px; font-size: 0.85rem;">
+                <div asp-validation-summary="All" class="text-danger m-0 list-unstyled"></div>
+            </div>
+        }
+
+        <div class="form-group mb-4">
+            <label asp-for="UserName" class="text-uppercase small font-weight-bold mb-2 d-block form-label-custom">Nombre de usuario</label>
+            <div class="position-relative">
+                <span class="position-absolute input-icon-left">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                </span>
+                <input asp-for="UserName" class="form-control input-with-icon" placeholder="p. ej. george_artemis" required />
+            </div>
+        </div>
+
+        <div class="form-group mb-5">
+            <label asp-for="Password" class="text-uppercase small font-weight-bold mb-2 d-block form-label-custom">Contraseña</label>
+            <div class="position-relative">
+                <span class="position-absolute input-icon-left">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                </span>
+                <input id="Password" asp-for="Password" type="password" class="form-control input-with-icon" placeholder="••••••••" required />
+                <span id="togglePassword" class="position-absolute input-icon-right">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </span>
+            </div>
+        </div>
+
+        <button type="submit" class="btn-primary-neon mb-4">Iniciar sesión</button>
+        
+        <div class="text-center">
+            <a asp-action="ForgotPassword" class="auth-link">Restablecer contraseña</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.getElementById('togglePassword')?.addEventListener('click', function () {
+            const passwordInput = document.getElementById('Password');
+            if (passwordInput) {
+                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passwordInput.setAttribute('type', type);
+            }
+        });
+    </script>
+}
+

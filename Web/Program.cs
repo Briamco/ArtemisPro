@@ -41,7 +41,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/Account/Login";
     options.LogoutPath = "/Account/Logout";
-    options.AccessDeniedPath = "/AccessDenied";
+    options.AccessDeniedPath = "/Account/AccessDenied";
     options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
     options.SlidingExpiration = true;
     options.Cookie.HttpOnly = true;
@@ -56,8 +56,10 @@ builder.Services.AddSharedInfrastructure(builder.Configuration);
 
 builder.Services.AddControllersWithViews();
 
+
 var app = builder.Build();
 
+/* TEMPORALMENTE COMENTADO 
 // Startup seeding
 using (var scope = app.Services.CreateScope())
 {
@@ -86,6 +88,7 @@ using (var scope = app.Services.CreateScope())
         await connection.CloseAsync();
     }
 }
+*/
 
 if (!app.Environment.IsDevelopment())
 {
@@ -102,7 +105,7 @@ app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
+    pattern: "{controller=Account}/{action=Login}/{id?}")
     .WithStaticAssets();
 
 app.Run();
