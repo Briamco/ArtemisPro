@@ -43,6 +43,11 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+{
+    options.TokenLifespan = TimeSpan.FromMinutes(30);
+});
+
 // JWT Authentication
 var jwtKey = builder.Configuration["JwtSettings:Key"]!;
 var jwtIssuer = builder.Configuration["JwtSettings:Issuer"]!;
