@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Artemis Banking Pro</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-main: #0B101E;
+            --bg-card: #141C2B;
+            --cyan-accent: #00E5FF;
+            --text-muted: #6B7A90;
+            --error-bg: #2C161D;
+            --error-text: #FF6B6B;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: #FFFFFF;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            width: 100%;
+        }
+
+        .form-wrapper {
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .auth-container {
+            background-color: var(--bg-card);
+            padding: 2.5rem 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            width: 100%;
+        }
+
+        .form-control {
+            background-color: #080D17;
+            border: 1px solid #1F2A3D;
+            color: white;
+            border-radius: 8px;
+            padding: 12px 15px; 
+        }
+        
+        .form-control:focus {
+            background-color: #080D17;
+            color: white;
+            outline: none;
+            border-color: var(--cyan-accent);
+            box-shadow: 0 0 0 0.25rem rgba(0, 229, 255, 0.25);
+        }
+
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover, 
+        input:-webkit-autofill:focus, 
+        input:-webkit-autofill:active{
+            -webkit-box-shadow: 0 0 0 30px #080D17 inset !important;
+            -webkit-text-fill-color: white !important;
+        }
+
+        .btn-primary-neon {
+            background-color: var(--cyan-accent);
+            color: #000;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary-neon:hover {
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.4);
+            background-color: #33eaff;
+        }
+
+        .custom-footer {
+            border-top: 1px solid #1F2A3D;
+            padding: 25px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #8A99AF;
+            font-size: 0.85rem;
+            width: 100%;
+            background-color: var(--bg-main);
+        }
+
+        .social-icons svg {
+            color: #8A99AF;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .social-icons svg:hover {
+            color: var(--cyan-accent);
+        }
+
+        .brand-icon-badge {
+            background-color: rgba(0, 229, 255, 0.1);
+        }
+
+        .form-label-custom {
+            color: #8A99AF;
+            letter-spacing: 1px;
+            font-size: 0.75rem;
+        }
+
+        .input-with-icon {
+            padding-left: 45px;
+        }
+
+        .input-icon-left {
+            top: 12px;
+            left: 15px;
+            color: #6B7A90;
+        }
+
+        .input-icon-right {
+            top: 12px;
+            right: 15px;
+            color: #6B7A90;
+            cursor: pointer;
+        }
+
+        .auth-link {
+            color: var(--cyan-accent);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        @@media (max-width: 576px) {
+            .custom-footer {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    
+    <main role="main">
+        <div class="form-wrapper">
+            @RenderBody()
+        </div>
+    </main>
+
+  
+    <footer class="custom-footer">
+        <div>
+            &copy; 2026 Artemis Banking Pro. Todos los derechos reservados.
+        </div>
+        <div class="social-icons d-flex gap-4">
+    
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
+            </svg>
+    
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+            </svg>
+
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="4" x2="20" y2="20"></line>
+                <line x1="20" y1="4" x2="4" y2="20"></line>
+            </svg>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+    
+</body>
+</html>

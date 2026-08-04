@@ -1,0 +1,65 @@
+@{
+    ViewData["Title"] = "Acceso Denegado";
+    Layout = "~/Views/Shared/_HomeLayout.cshtml";
+}
+
+<div class="text-center mb-4">
+    <div class="d-inline-block p-3 rounded-circle mb-3" style="background-color: rgba(0, 229, 255, 0.1);">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 21h18"></path><path d="M3 10h18"></path><path d="M5 6l7-3 7 3"></path><path d="M4 10v11"></path><path d="M20 10v11"></path><path d="M8 14v3"></path><path d="M12 14v3"></path><path d="M16 14v3"></path>
+        </svg>
+    </div>
+    <h2 class="font-weight-bold" style="letter-spacing: 1px;">Artemis Banking Pro</h2>
+    <p class="text-white small" style="opacity: 0.9;">Seguridad del Sistema</p>
+</div>
+
+<div class="auth-container text-center">
+    
+    <div class="d-inline-block p-4 rounded-circle mb-4" style="background-color: rgba(255, 107, 107, 0.1);">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--error-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            <line x1="12" y1="15" x2="12" y2="17"></line>
+        </svg>
+    </div>
+
+    <h4 class="mb-3" style="font-weight: 600; color: var(--error-text);">Acceso Restringido</h4>
+    
+    <p class="mb-5" style="color: #8A99AF; font-size: 0.95rem; line-height: 1.5;">
+        No posee permisos para acceder a esta sección.
+    </p>
+
+    @if (User.Identity != null && User.Identity.IsAuthenticated)
+    {
+        if (User.IsInRole("Administrador"))
+        {
+            <a asp-controller="Admin" asp-action="Index" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
+                Volver al Inicio (Administrador)
+            </a>
+        }
+        else if (User.IsInRole("Cajero"))
+        {
+            <a asp-controller="Cajero" asp-action="Index" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
+                Volver al Inicio (Cajero)
+            </a>
+        }
+        else if (User.IsInRole("Cliente"))
+        {
+            <a asp-controller="Cliente" asp-action="Index" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
+                Volver al Inicio (Cliente)
+            </a>
+        }
+        else
+        {
+            <a asp-controller="Home" asp-action="Index" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
+                Volver al Inicio
+            </a>
+        }
+    }
+    else
+    {
+        <a asp-controller="Account" asp-action="Login" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
+            Ir al inicio de sesión
+        </a>
+    }
+</div>

@@ -36,12 +36,17 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+{
+    options.TokenLifespan = TimeSpan.FromMinutes(30);
+});
+
 // Cookie configuration
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/Account/Login";
     options.LogoutPath = "/Account/Logout";
-    options.AccessDeniedPath = "/AccessDenied";
+    options.AccessDeniedPath = "/Account/AccessDenied";
     options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
     options.SlidingExpiration = true;
     options.Cookie.HttpOnly = true;
@@ -56,34 +61,44 @@ builder.Services.AddSharedInfrastructure(builder.Configuration);
 
 builder.Services.AddControllersWithViews();
 
+
 var app = builder.Build();
 
 // Startup seeding
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<AppDbContext>();
-    var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
-    var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-
-    var connection = context.Database.GetDbConnection();
-    await connection.OpenAsync();
-
-    using var command = connection.CreateCommand();
-    command.CommandText = "EXEC sp_getapplock @Resource = 'ArtemisProStartup', @LockMode = 'Exclusive', @LockTimeout = 120000";
-    await command.ExecuteNonQueryAsync();
+    var logger = services.GetRequiredService<ILogger<Program>>();
 
     try
     {
-        await context.Database.MigrateAsync();
-        await Persistence.Seeds.DefaultRolesAndUsers.SeedAsync(context, userManager, roleManager);
+        var context = services.GetRequiredService<AppDbContext>();
+        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+        var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+
+        var connection = context.Database.GetDbConnection();
+        await connection.OpenAsync();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "EXEC sp_getapplock @Resource = 'ArtemisProStartup', @LockMode = 'Exclusive', @LockTimeout = 120000";
+        await command.ExecuteNonQueryAsync();
+
+        try
+        {
+            await context.Database.MigrateAsync();
+            await Persistence.Seeds.DefaultRolesAndUsers.SeedAsync(context, userManager, roleManager);
+        }
+        finally
+        {
+            using var releaseCommand = connection.CreateCommand();
+            releaseCommand.CommandText = "EXEC sp_releaseapplock @Resource = 'ArtemisProStartup'";
+            await releaseCommand.ExecuteNonQueryAsync();
+            await connection.CloseAsync();
+        }
     }
-    finally
+    catch (Exception ex)
     {
-        using var releaseCommand = connection.CreateCommand();
-        releaseCommand.CommandText = "EXEC sp_releaseapplock @Resource = 'ArtemisProStartup'";
-        await releaseCommand.ExecuteNonQueryAsync();
-        await connection.CloseAsync();
+        logger.LogWarning(ex, "No se pudo ejecutar el seeding de usuarios/roles. Es posible que falten las migraciones de base de datos.");
     }
 }
 
@@ -102,7 +117,7 @@ app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
+    pattern: "{controller=Account}/{action=Login}/{id?}")
     .WithStaticAssets();
 
 app.Run();
