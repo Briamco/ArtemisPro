@@ -110,8 +110,8 @@ public class AuthAppService(
         var (controller, action) = primaryRole switch
         {
             "Administrador" => ("Admin", "Index"),
-            "Cajero" => ("Cashier", "Index"),
-            "Cliente" => ("Client", "Index"),
+            "Cajero" => ("Cajero", "Index"),
+            "Cliente" => ("Cliente", "Index"),
             _ => ("Home", "Index")
         };
 
@@ -190,12 +190,24 @@ public class AuthAppService(
         }
     }
 
-    public async Task<bool> ForgotPasswordAsync(string userName, string resetPasswordLinkFormat)
+    public async Task<ForgotPasswordResult> ForgotPasswordAsync(string userName, string resetPasswordLinkFormat)
     {
-        var user = await userManager.FindByEmailAsync(userName);
-        user ??= await userManager.FindByNameAsync(userName);
+        var user = await userManager.FindByNameAsync(userName);
+        user ??= await userManager.FindByEmailAsync(userName);
         if (user == null)
-            return false;
+            return new ForgotPasswordResult { ErrorMessage = "No existe un usuario registrado con este nombre de usuario." };
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+            return new ForgotPasswordResult { ErrorMessage = "Este usuario no tiene un correo electrónico registrado." };
+
+        var roles = await userManager.GetRolesAsync(user);
+        var webRoles = new[] { "Administrador", "Cajero", "Cliente" };
+        if (!roles.Any(r => webRoles.Contains(r)))
+            return new ForgotPasswordResult { ErrorMessage = "Este usuario no tiene permisos para realizar esta acción." };
+
+        user.IsActive = false;
+        user.UpdatedAt = DateTime.UtcNow;
+        await userManager.UpdateAsync(user);
 
         var rawToken = await userManager.GeneratePasswordResetTokenAsync(user);
         var safeToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(rawToken));
@@ -226,7 +238,7 @@ public class AuthAppService(
             """;
 
         await emailService.SendAsync(user.Email!, subject, body);
-        return true;
+        return new ForgotPasswordResult { Succeeded = true };
     }
 
     public async Task<bool> ResendActivationEmailAsync(string userName, string confirmationLinkFormat)
@@ -284,6 +296,9 @@ public class AuthAppService(
             var result = await userManager.ResetPasswordAsync(user, decodedToken, newPassword);
             if (result.Succeeded)
             {
+                user.IsActive = true;
+                user.UpdatedAt = DateTime.UtcNow;
+                await userManager.UpdateAsync(user);
                 await userManager.ResetAccessFailedCountAsync(user);
                 await userManager.SetLockoutEndDateAsync(user, null);
             }

@@ -72,7 +72,13 @@ public class AccountController : Controller
             return View(model);
 
         var resetLinkFormat = Url.Action("ResetPassword", "Account", new { email = "{0}", token = "{1}" }, Request.Scheme);
-        await _authService.ForgotPasswordAsync(model.UserName, resetLinkFormat!);
+        var result = await _authService.ForgotPasswordAsync(model.UserName, resetLinkFormat!);
+
+        if (!result.Succeeded)
+        {
+            ModelState.AddModelError(string.Empty, result.ErrorMessage ?? "Ocurrió un error al procesar la solicitud.");
+            return View(model);
+        }
 
         ViewBag.Message = "Se ha enviado un enlace de restablecimiento de contraseña al correo electrónico registrado.";
         return View("ForgotPasswordConfirmation");
@@ -104,8 +110,8 @@ public class AccountController : Controller
             return View(model);
         }
 
-        ViewBag.Message = "Su contraseña ha sido restablecida correctamente. Ya puede iniciar sesión.";
-        return View("ResetPasswordConfirmation");
+        TempData["SuccessMessage"] = "Su contraseña ha sido restablecida correctamente. Ya puede iniciar sesión.";
+        return RedirectToAction("Login");
     }
 
     [HttpGet]
@@ -128,7 +134,7 @@ public class AccountController : Controller
             return View("ActivationError");
         }
 
-        ViewBag.Message = "Su cuenta ha sido activada correctamente. Ya puede iniciar sesión.";
-        return View("ActivationSuccess");
+        TempData["SuccessMessage"] = "Su cuenta ha sido activada correctamente. Ya puede iniciar sesión.";
+        return RedirectToAction("Login");
     }
 }
