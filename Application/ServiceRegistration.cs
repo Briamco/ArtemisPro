@@ -10,6 +10,7 @@ public static class ServiceRegistration
     public static IServiceCollection AddApplicationLayer(this IServiceCollection services)
     {
         services.AddScoped<IAuthAppService, AuthAppService>();
+        services.AddScoped<IUserAppService, UserAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
         return services;
     }
