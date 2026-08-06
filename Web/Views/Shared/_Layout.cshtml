@@ -129,20 +129,25 @@
         </div>
 
         <ul class="nav-menu">
+            @{
+                // Esta línea detecta en qué acción/pantalla nos encontramos actualmente
+                var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? "";
+            }
+
             <li class="nav-item">
-                <a asp-controller="Admin" asp-action="Index" class="nav-link active">
+                <a asp-controller="Admin" asp-action="Index" class="nav-link @(currentAction == "Index" ? "active" : "")">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                     Home
                 </a>
             </li>
             <li class="nav-item">
-                <a asp-controller="Admin" asp-action="UserManagement" class="nav-link">
+                <a asp-controller="Admin" asp-action="UserManagement" class="nav-link @(currentAction.Contains("User") ? "active" : "")">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                     Gestión de usuarios
                 </a>
             </li>
             <li class="nav-item">
-                <a href="#" class="nav-link">
+                <a asp-controller="Admin" asp-action="LoanManagement" class="nav-link @(currentAction.Contains("Loan") || currentAction == "ConfirmRiskLoan" ? "active" : "")">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
                     Gestión de préstamos
                 </a>

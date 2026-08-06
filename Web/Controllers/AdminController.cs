@@ -145,4 +145,212 @@ public class AdminController : Controller
         
         return RedirectToAction(nameof(UserManagement));
     }
+
+    // LOAN MODULE
+
+    private static List<LoanViewModel> _dummyLoans = new List<LoanViewModel>
+    {
+        new LoanViewModel { Id = "1", LoanNumber = "948271053", ClientName = "Roberto Carlos", ClientCedula = "0912345678", ApprovedCapital = 15000.00m, TotalInstallments = 48, PaidInstallments = 12, PendingAmount = 11250.00m, InterestRate = 14.5m, TermInMonths = 48, LoanStatus = "Activo", ClientStatus = "Al día" },
+        new LoanViewModel { Id = "2", LoanNumber = "837492011", ClientName = "María Suárez", ClientCedula = "1723456789", ApprovedCapital = 5500.00m, TotalInstallments = 24, PaidInstallments = 8, PendingAmount = 3666.67m, InterestRate = 12.0m, TermInMonths = 24, LoanStatus = "Activo", ClientStatus = "En mora" },
+        new LoanViewModel { Id = "3", LoanNumber = "726354890", ClientName = "Juan Gómez", ClientCedula = "0102345678", ApprovedCapital = 2000.00m, TotalInstallments = 12, PaidInstallments = 12, PendingAmount = 0.00m, InterestRate = 16.0m, TermInMonths = 12, LoanStatus = "Completado", ClientStatus = "Al día" }
+    };
+
+   [HttpGet]
+    public IActionResult LoanManagement(string statusFilter = "Activos", string searchCedula = "", int page = 1)
+    {
+        var query = _dummyLoans.AsQueryable();
+        
+        if (statusFilter == "Activos")
+        {
+            query = query.Where(l => l.LoanStatus == "Activo");
+        }
+        else if (statusFilter == "Completados")
+        {
+            query = query.Where(l => l.LoanStatus == "Completado");
+        }
+
+        if (!string.IsNullOrEmpty(searchCedula))
+        {
+            query = query.Where(l => l.ClientCedula.Contains(searchCedula));
+            
+            if (!query.Any())
+            {
+                ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene préstamos registrados.";
+            }
+        }
+
+        query = query.OrderBy(l => l.LoanStatus == "Completado" ? 1 : 0).ThenByDescending(l => l.Id);
+
+        var loans = query.ToList();
+        var model = new LoanListViewModel
+        {
+            Loans = loans,
+            CurrentFilter = statusFilter,
+            SearchCedula = searchCedula,
+            CurrentPage = page,
+            TotalPages = 1,
+            TotalRecords = loans.Count
+        };
+
+        return View(model);
+    }
+
+    [HttpGet]
+    public IActionResult AssignLoanStep1()
+    {
+        var model = new AssignLoanStep1ViewModel
+        {
+            AverageSystemDebt = 125450.00m, 
+            EligibleClients = new List<ClientSelectionViewModel>
+            {
+                new ClientSelectionViewModel { Id = "c1", Cedula = "402-1234567-8", FullName = "Juan Pérez Domínguez", Email = "juan.perez@email.com", TotalDebt = 0.00m },
+                new ClientSelectionViewModel { Id = "c2", Cedula = "001-9876543-2", FullName = "María Rodríguez Alba", Email = "m.rodriguez@empresa.com.do", TotalDebt = 15200.50m },
+                new ClientSelectionViewModel { Id = "c3", Cedula = "031-4567890-1", FullName = "Carlos Sánchez Mella", Email = "csanchez88@gmail.com", TotalDebt = 5000.00m }
+            }
+        };
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult AssignLoanStep1(AssignLoanStep1ViewModel model)
+    {
+        if (string.IsNullOrEmpty(model.SelectedClientId))
+        {
+            TempData["ErrorMessage"] = "Debe seleccionar un cliente para continuar.";
+            return RedirectToAction(nameof(AssignLoanStep1));
+        }
+
+        return RedirectToAction(nameof(AssignLoanStep2), new { clientId = model.SelectedClientId });
+    }
+
+    [HttpGet]
+    public IActionResult AssignLoanStep2(string clientId)
+    {
+        var model = new AssignLoanStep2ViewModel
+        {
+            ClientId = clientId,
+            ClientName = "Roberto Sánchez Almánzar",
+            ClientCedula = "001-1234567-8"
+        };
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult AssignLoanStep2(AssignLoanStep2ViewModel model)
+    {
+        if (!ModelState.IsValid)
+            return View(model);
+
+        // simulation of risk evaluation
+        decimal systemAverage = 120000.00m;
+        decimal currentDebt = 45200.00m; 
+
+        //calulation of the projected debt after assigning the new loan
+        decimal r = (model.InterestRate / 100) / 12;
+        int n = model.TermInMonths;
+        decimal P = model.Amount;
+        decimal C = model.InterestRate == 0 ? (P / n) : (P * (r * (decimal)Math.Pow((double)(1 + r), n)) / ((decimal)Math.Pow((double)(1 + r), n) - 1));
+        
+        // calculation of the total amount to pay and the projected debt
+        decimal totalToPay = C * n;
+        decimal projectedDebt = currentDebt + totalToPay;
+
+        // risk evaluation
+        if (projectedDebt > systemAverage)
+        {
+            var riskModel = new RiskAlertViewModel
+            {
+                ClientId = model.ClientId,
+                CurrentDebt = currentDebt,
+                ProjectedDebt = projectedDebt,
+                SystemAverage = systemAverage,
+                Amount = model.Amount,
+                InterestRate = model.InterestRate,
+                TermInMonths = model.TermInMonths,
+                WarningMessage = currentDebt > systemAverage 
+                    ? "Este cliente se considera de alto riesgo, ya que su deuda actual supera el promedio del sistema."
+                    : "Asignar este préstamo convertirá al cliente en un cliente de alto riesgo, ya que su deuda superará el umbral promedio del sistema."
+            };
+            return View("RiskAlert", riskModel); 
+        }
+
+        TempData["SuccessMessage"] = "Préstamo asignado y desembolsado correctamente (Sin riesgo).";
+        return RedirectToAction(nameof(LoanManagement));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult ConfirmRiskLoan(RiskAlertViewModel model)
+    {
+        TempData["SuccessMessage"] = "Préstamo de alto riesgo asignado bajo su autorización.";
+        return RedirectToAction(nameof(LoanManagement));
+    }
+
+    [HttpGet]
+    public IActionResult LoanDetails(string id)
+    {
+        var model = new LoanDetailsViewModel
+        {
+            LoanNumber = "PR-2026-8942",
+            ClientName = "TechCorp Solutions...",
+            ApprovedAmount = 150000.00m,
+            InterestRate = 8.5m,
+            TermInMonths = 36,
+            LoanStatus = "Activo",
+            PendingBalance = 82500.00m,
+            MonthlyQuote = 4735.25m,
+            StartDate = new DateTime(2026, 1, 12),
+            NextDueDate = new DateTime(2026, 11, 12),
+            PaymentProgress = 45,
+            AmortizationTable = new List<AmortizationRowViewModel>
+            {
+                new AmortizationRowViewModel { InstallmentNumber = 1, DueDate = new DateTime(2026, 2, 12), InstallmentValue = 4735.25m, InterestAmount = 1062.50m, CapitalAmount = 3672.75m, PendingBalance = 146327.25m, PaymentStatus = "Pagada", IsOverdue = false },
+                new AmortizationRowViewModel { InstallmentNumber = 2, DueDate = new DateTime(2026, 3, 12), InstallmentValue = 4735.25m, InterestAmount = 1036.48m, CapitalAmount = 3698.77m, PendingBalance = 142628.48m, PaymentStatus = "Pagada", IsOverdue = false },
+                new AmortizationRowViewModel { InstallmentNumber = 9, DueDate = new DateTime(2026, 10, 12), InstallmentValue = 4735.25m, InterestAmount = 835.40m, CapitalAmount = 3899.85m, PendingBalance = 114205.10m, PaymentStatus = "Parcial", IsOverdue = false },
+                new AmortizationRowViewModel { InstallmentNumber = 10, DueDate = new DateTime(2026, 11, 12), InstallmentValue = 4735.25m, InterestAmount = 807.53m, CapitalAmount = 3927.72m, PendingBalance = 110277.38m, PaymentStatus = "Pendiente", IsOverdue = true },
+                new AmortizationRowViewModel { InstallmentNumber = 11, DueDate = new DateTime(2026, 12, 12), InstallmentValue = 4735.25m, InterestAmount = 779.60m, CapitalAmount = 3955.65m, PendingBalance = 106321.73m, PaymentStatus = "Pendiente", IsOverdue = false }
+            }
+        };
+
+        return View(model);
+    }
+
+    [HttpGet]
+    public IActionResult EditLoanRate(string id)
+    {
+        var loan = _dummyLoans.FirstOrDefault(l => l.Id == id);
+        if (loan == null)
+        {
+            TempData["ErrorMessage"] = "El préstamo seleccionado no existe.";
+            return RedirectToAction(nameof(LoanManagement));
+        }
+
+        if (loan.LoanStatus != "Activo")
+        {
+            TempData["ErrorMessage"] = "Solo se puede modificar la tasa de interés de préstamos activos.";
+            return RedirectToAction(nameof(LoanManagement));
+        }
+
+        var model = new EditLoanRateViewModel
+        {
+            Id = loan.Id,
+            InterestRate = loan.InterestRate
+        };
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult EditLoanRate(EditLoanRateViewModel model)
+    {
+        if (!ModelState.IsValid)
+            return View(model);
+
+        TempData["SuccessMessage"] = "Tasa de interés actualizada y cuotas futuras recalculadas correctamente.";
+        return RedirectToAction(nameof(LoanManagement));
+    }
 }
