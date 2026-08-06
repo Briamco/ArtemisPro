@@ -9,6 +9,7 @@ using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Identity;
 using AutoMapper;
+using System.Security.Cryptography;
 
 namespace Application.Services;
 
@@ -86,52 +87,65 @@ public class UserAppService : IUserAppService
         if (dto.Role == "Cliente" && dto.InitialBalance < 0)
             return (false, "El monto inicial no puede ser negativo.");
 
-        // Delegar creación y envío de correo a AuthAppService
-        var result = await _authAppService.RegisterAsync(dto, confirmationLinkFormat);
-        if (!result.Succeeded)
-            return (false, string.Join(", ", result.Errors.Select(e => e.Description)));
-
-        // Creación automática de cuenta principal para clientes
-        if (dto.Role == "Cliente")
+        await _unitOfWork.BeginTransactionAsync();
+        try
         {
-            var createdUser = await _userManager.FindByEmailAsync(dto.Email);
-            if (createdUser != null)
+            // Delegar creación y envío de correo a AuthAppService
+            var result = await _authAppService.RegisterAsync(dto, confirmationLinkFormat);
+            if (!result.Succeeded)
             {
-                string accountNumber = await GenerateUniqueAccountNumberAsync();
-                
-                var account = new SavingsAccount
-                {
-                    ClientId = createdUser.Id,
-                    AccountNumber = accountNumber,
-                    Balance = dto.InitialBalance,
-                    AccountType = AccountType.Principal,
-                    Status = AccountStatus.Activa,
-                    CreatedAt = DateTime.Now
-                };
-                
-                await _unitOfWork.SavingsAccounts.AddAsync(account);
-
-                // Si monto inicial > 0, registrar transacción de Crédito
-                if (dto.InitialBalance > 0)
-                {
-                    var transaction = new Transaction
-                    {
-                        SavingsAccountId = account.Id,
-                        Amount = dto.InitialBalance,
-                        Type = TransactionType.Credito,
-                        Beneficiary = $"{dto.FirstName} {dto.LastName}",
-                        Origin = "Apertura de cuenta",
-                        Status = TransactionStatus.Aprobada,
-                        Date = DateTime.Now
-                    };
-                    await _unitOfWork.Transactions.AddAsync(transaction);
-                }
-                
-                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.RollbackTransactionAsync();
+                return (false, string.Join(", ", result.Errors.Select(e => e.Description)));
             }
-        }
 
-        return (true, null);
+            // Creación automática de cuenta principal para clientes
+            if (dto.Role == "Cliente")
+            {
+                var createdUser = await _userManager.FindByEmailAsync(dto.Email);
+                if (createdUser != null)
+                {
+                    string accountNumber = await GenerateUniqueAccountNumberAsync();
+                    
+                    var account = new SavingsAccount
+                    {
+                        ClientId = createdUser.Id,
+                        AccountNumber = accountNumber,
+                        Balance = dto.InitialBalance,
+                        AccountType = AccountType.Principal,
+                        Status = AccountStatus.Activa,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    
+                    await _unitOfWork.SavingsAccounts.AddAsync(account);
+
+                    // Si monto inicial > 0, registrar transacción de Crédito
+                    if (dto.InitialBalance > 0)
+                    {
+                        var transaction = new Transaction
+                        {
+                            SavingsAccountId = account.Id,
+                            Amount = dto.InitialBalance,
+                            Type = TransactionType.Credito,
+                            Beneficiary = $"{dto.FirstName} {dto.LastName}",
+                            Origin = "Apertura de cuenta",
+                            Status = TransactionStatus.Aprobada,
+                            Date = DateTime.UtcNow
+                        };
+                        await _unitOfWork.Transactions.AddAsync(transaction);
+                    }
+                    
+                    await _unitOfWork.SaveChangesAsync();
+                }
+            }
+
+            await _unitOfWork.CommitTransactionAsync();
+            return (true, null);
+        }
+        catch (Exception)
+        {
+            await _unitOfWork.RollbackTransactionAsync();
+            throw;
+        }
     }
 
     public async Task<(bool Success, string? Error)> EditUserAsync(Guid id, EditUserDto dto)
@@ -196,7 +210,7 @@ public class UserAppService : IUserAppService
                     Beneficiary = $"{user.FirstName} {user.LastName}",
                     Origin = "Abono adicional",
                     Status = TransactionStatus.Aprobada,
-                    Date = DateTime.Now
+                    Date = DateTime.UtcNow
                 };
                 await _unitOfWork.Transactions.AddAsync(transaction);
                 
@@ -224,20 +238,16 @@ public class UserAppService : IUserAppService
 
     private async Task<string> GenerateUniqueAccountNumberAsync()
     {
-        var random = new Random();
         string accountNumber;
         bool existsInSavings;
         bool existsInLoans;
         
         do
         {
-            accountNumber = random.Next(100000000, 999999999).ToString();
+            accountNumber = RandomNumberGenerator.GetInt32(100000000, 999999999).ToString();
             
-            var existingSavings = await _unitOfWork.SavingsAccounts.FindAsync(a => a.AccountNumber == accountNumber);
-            existsInSavings = existingSavings.Any();
-            
-            var existingLoans = await _unitOfWork.Loans.FindAsync(l => l.LoanNumber == accountNumber);
-            existsInLoans = existingLoans.Any();
+            existsInSavings = await _unitOfWork.SavingsAccounts.ExistsAsync(a => a.AccountNumber == accountNumber);
+            existsInLoans = await _unitOfWork.Loans.ExistsAsync(l => l.LoanNumber == accountNumber);
             
         } while (existsInSavings || existsInLoans);
 
