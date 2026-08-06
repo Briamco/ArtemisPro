@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Application.DTOs.Banking;
@@ -40,9 +41,8 @@ public class AdminDashboardAppService(
         //   2. Pagos a préstamos (LoanInstallment con PaymentStatus Pagada)
 
         // Pagos a tarjetas de crédito (aprobados = procesados correctamente)
-        var allCreditCardTransactions = await unitOfWork.CreditCardTransactions.GetAllAsync();
-        var creditCardPayments = allCreditCardTransactions
-            .Where(cct => cct.Status == CreditCardTransactionStatus.Aprobado)
+        var creditCardPayments = (await unitOfWork.CreditCardTransactions
+            .FindAsync(cct => cct.Status == CreditCardTransactionStatus.Aprobado))
             .ToList();
 
         var totalPagosTarjetas = creditCardPayments.Count;
@@ -50,12 +50,13 @@ public class AdminDashboardAppService(
             .Count(cct => cct.Date.Date == today);
 
         // Pagos a préstamos (cuotas pagadas)
-        var allInstallments = await unitOfWork.LoanInstallments.GetAllAsync();
-        var paidInstallments = allInstallments
-            .Where(li => li.PaymentStatus == PaymentStatus.Pagada)
+        var paidInstallments = (await unitOfWork.LoanInstallments
+            .FindAsync(li => li.PaymentStatus == PaymentStatus.Pagada))
             .ToList();
 
         var totalPagosPrestamos = paidInstallments.Count;
+        // Nota: Se usa DueDate como referencia de fecha ya que la entidad LoanInstallment
+        // no posee un campo de fecha de pago efectivo (PaidDate).
         var pagosPrestamosDia = paidInstallments
             .Count(li => li.DueDate.Date == today);
 
@@ -71,17 +72,21 @@ public class AdminDashboardAppService(
 
         // ── Productos Financieros ────────────────────────────────────────
         // Solo se cuentan productos en estado activo.
-        var allSavingsAccounts = await unitOfWork.SavingsAccounts.GetAllAsync();
-        var cuentasAhorroActivas = allSavingsAccounts
-            .Count(sa => sa.Status == AccountStatus.Activa);
+        // Se usa FindAsync para delegar el filtro a la base de datos.
+        var savingsAccountsActivas = (await unitOfWork.SavingsAccounts
+            .FindAsync(sa => sa.Status == AccountStatus.Activa))
+            .ToList();
+        var cuentasAhorroActivas = savingsAccountsActivas.Count;
 
-        var allLoans = await unitOfWork.Loans.GetAllAsync();
-        var prestamosVigentes = allLoans
-            .Count(l => l.Status == LoanStatus.Activo);
+        var loansActivos = (await unitOfWork.Loans
+            .FindAsync(l => l.Status == LoanStatus.Activo))
+            .ToList();
+        var prestamosVigentes = loansActivos.Count;
 
-        var allCreditCards = await unitOfWork.CreditCards.GetAllAsync();
-        var tarjetasCreditoActivas = allCreditCards
-            .Count(cc => cc.Status == CardStatus.Activa);
+        var creditCardsActivas = (await unitOfWork.CreditCards
+            .FindAsync(cc => cc.Status == CardStatus.Activa))
+            .ToList();
+        var tarjetasCreditoActivas = creditCardsActivas.Count;
 
         var totalProductosFinancieros = cuentasAhorroActivas + prestamosVigentes + tarjetasCreditoActivas;
 
@@ -99,22 +104,23 @@ public class AdminDashboardAppService(
                 .ToHashSet();
 
             // Deuda de préstamos activos de clientes activos:
-            // Sumamos el monto de las cuotas pendientes (no pagadas)
-            var prestamosActivosDeClientes = allLoans
-                .Where(l => clienteActivoIds.Contains(l.ClientId) && l.Status == LoanStatus.Activo)
-                .ToList();
+            // Obtenemos los IDs de préstamos activos de clientes activos
+            var prestamosActivosIds = loansActivos
+                .Where(l => clienteActivoIds.Contains(l.ClientId))
+                .Select(l => l.Id)
+                .ToHashSet();
 
-            decimal deudaPrestamos = 0m;
-            foreach (var prestamo in prestamosActivosDeClientes)
-            {
-                var cuotasPendientes = allInstallments
-                    .Where(i => i.LoanId == prestamo.Id && i.PaymentStatus != PaymentStatus.Pagada);
-                deudaPrestamos += cuotasPendientes.Sum(i => i.Amount);
-            }
+            // Sumamos las cuotas pendientes (no pagadas) de esos préstamos
+            // usando las cuotas ya filtradas, sin loop N+1.
+            var cuotasPendientes = (await unitOfWork.LoanInstallments
+                .FindAsync(i => i.PaymentStatus != PaymentStatus.Pagada))
+                .Where(i => prestamosActivosIds.Contains(i.LoanId));
+
+            decimal deudaPrestamos = cuotasPendientes.Sum(i => i.Amount);
 
             // Deuda de tarjetas de crédito activas de clientes activos
-            var deudaTarjetas = allCreditCards
-                .Where(cc => clienteActivoIds.Contains(cc.ClientId) && cc.Status == CardStatus.Activa)
+            decimal deudaTarjetas = creditCardsActivas
+                .Where(cc => clienteActivoIds.Contains(cc.ClientId))
                 .Sum(cc => cc.Debt);
 
             var deudaTotal = deudaPrestamos + deudaTarjetas;
