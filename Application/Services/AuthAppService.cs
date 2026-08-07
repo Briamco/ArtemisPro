@@ -166,7 +166,12 @@ public class AuthAppService(
     {
         var user = await userManager.FindByEmailAsync(email);
         if (user == null)
-            return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "Usuario no encontrado." });
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El enlace de activación no es válido." });
+
+        if (user.EmailConfirmed && user.IsActive)
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "TokenAlreadyUsed", Description = "Este enlace de activación ya fue utilizado." });
+        }
 
         try
         {
@@ -177,16 +182,25 @@ public class AuthAppService(
             if (result.Succeeded)
             {
                 user.IsActive = true;
+                user.UpdatedAt = DateTime.UtcNow;
                 var updateResult = await userManager.UpdateAsync(user);
                 if (!updateResult.Succeeded)
                     return updateResult;
             }
+            else
+            {
+                if (user.EmailConfirmed)
+                {
+                    return IdentityResult.Failed(new IdentityError { Code = "TokenAlreadyUsed", Description = "Este enlace de activación ya fue utilizado." });
+                }
+                return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El enlace de activación no es válido." });
+            }
 
             return result;
         }
-        catch (FormatException)
+        catch
         {
-            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token de activación es inválido o está corrupto." });
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El enlace de activación no es válido." });
         }
     }
 
@@ -198,12 +212,12 @@ public class AuthAppService(
             return new ForgotPasswordResult { ErrorMessage = "No existe un usuario registrado con este nombre de usuario." };
 
         if (string.IsNullOrWhiteSpace(user.Email))
-            return new ForgotPasswordResult { ErrorMessage = "Este usuario no tiene un correo electrónico registrado." };
+            return new ForgotPasswordResult { ErrorMessage = "Este usuario no tiene un correo electrónico registrado. No es posible enviar la solicitud de restablecimiento." };
 
         var roles = await userManager.GetRolesAsync(user);
         var webRoles = new[] { "Administrador", "Cajero", "Cliente" };
         if (!roles.Any(r => webRoles.Contains(r)))
-            return new ForgotPasswordResult { ErrorMessage = "Este usuario no tiene permisos para realizar esta acción." };
+            return new ForgotPasswordResult { ErrorMessage = "Este usuario no tiene permisos para acceder a la aplicación web." };
 
         user.IsActive = false;
         user.UpdatedAt = DateTime.UtcNow;
@@ -286,7 +300,7 @@ public class AuthAppService(
     {
         var user = await userManager.FindByEmailAsync(email);
         if (user == null)
-            return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "Usuario no encontrado." });
+            return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "El enlace de restablecimiento no es válido." });
 
         try
         {
@@ -301,12 +315,27 @@ public class AuthAppService(
                 await userManager.UpdateAsync(user);
                 await userManager.ResetAccessFailedCountAsync(user);
                 await userManager.SetLockoutEndDateAsync(user, null);
+                return result;
             }
-            return result;
+
+            var errors = result.Errors.Select(err =>
+            {
+                if (err.Code == "InvalidToken")
+                {
+                    return new IdentityError
+                    {
+                        Code = "InvalidToken",
+                        Description = "El enlace de restablecimiento ha expirado. Solicite un nuevo restablecimiento de contraseña."
+                    };
+                }
+                return err;
+            }).ToList();
+
+            return IdentityResult.Failed(errors.ToArray());
         }
-        catch (FormatException)
+        catch
         {
-            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token de recuperación es inválido o está corrupto." });
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El enlace de restablecimiento no es válido." });
         }
     }
 

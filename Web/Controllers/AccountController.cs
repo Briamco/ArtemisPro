@@ -124,14 +124,17 @@ public class AccountController : Controller
     public async Task<IActionResult> Activate(string email, string token)
     {
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(token))
+        {
+            TempData["ErrorMessage"] = "El enlace de activación no es válido.";
             return RedirectToAction("Login");
+        }
 
         var result = await _authService.ActivateAccountAsync(email, token);
         if (!result.Succeeded)
         {
-            var errorMessage = result.Errors.FirstOrDefault()?.Description ?? "El enlace de activación es inválido o ha expirado.";
-            ViewBag.ErrorMessage = errorMessage;
-            return View("ActivationError");
+            var errorMessage = result.Errors.FirstOrDefault()?.Description ?? "El enlace de activación no es válido.";
+            TempData["ErrorMessage"] = errorMessage;
+            return RedirectToAction("Login");
         }
 
         TempData["SuccessMessage"] = "Su cuenta ha sido activada correctamente. Ya puede iniciar sesión.";

@@ -25,6 +25,13 @@
             </div>
         }
 
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <div class="alert alert-danger mb-4 text-center" style="background-color: var(--error-bg); border: 1px solid #4A2531; color: var(--error-text); border-radius: 8px; padding: 10px; font-size: 0.85rem;">
+                @TempData["ErrorMessage"]
+            </div>
+        }
+
         @if (!ViewData.ModelState.IsValid)
         {
             <div class="alert alert-danger mb-4" style="background-color: var(--error-bg); border: 1px solid #4A2531; color: var(--error-text); border-radius: 8px; padding: 10px; font-size: 0.85rem;">

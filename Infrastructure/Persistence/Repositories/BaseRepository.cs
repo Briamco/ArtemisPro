@@ -49,6 +49,11 @@ public class BaseRepository<T> : IBaseRepository<T> where T : class
         return await _context.Set<T>().Where(predicate).ToListAsync();
     }
 
+    public async Task<bool> ExistsAsync(Expression<Func<T, bool>> predicate)
+    {
+        return await _context.Set<T>().AnyAsync(predicate);
+    }
+
     public IQueryable<T> Query()
     {
         return _context.Set<T>().AsQueryable();
