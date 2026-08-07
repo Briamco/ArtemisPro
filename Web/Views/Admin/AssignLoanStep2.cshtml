@@ -1,0 +1,140 @@
+@model Application.Models.ViewModels.Admin.AssignLoanStep2ViewModel
+@{
+    ViewData["Title"] = "Asignar Préstamo - Paso 2";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .module-container { background-color: var(--bg-main); min-height: 100%; }
+    .form-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 30px; max-width: 700px; }
+    
+    .client-header { background-color: #0B101E; border-radius: 8px; padding: 20px; display: flex; align-items: center; gap: 15px; margin-bottom: 24px; border: 1px solid var(--border-color); }
+    .client-icon { width: 45px; height: 45px; border-radius: 50%; background-color: rgba(0, 229, 255, 0.1); color: var(--cyan-accent); display: flex; align-items: center; justify-content: center; }
+    
+    .custom-label { color: white; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; display: block; }
+    .custom-input, .custom-select { background-color: #080D17; border: 1px solid var(--border-color); color: white; padding: 12px 16px; border-radius: 8px; width: 100%; outline: none; }
+    .custom-input:focus, .custom-select:focus { border-color: var(--cyan-accent); }
+    
+    .estimated-quote-box { background-color: #080D17; border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+    .info-note { background-color: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); border-radius: 8px; padding: 15px; display: flex; gap: 12px; margin-top: 20px; }
+    
+    .btn-outline { background-color: transparent; color: white; border: 1px solid var(--border-color); padding: 12px 24px; border-radius: 8px; font-weight: 600; text-decoration: none; }
+    .btn-next { background-color: var(--cyan-accent); color: #000; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+</style>
+
+<div class="module-container">
+    <div class="mb-4">
+        <h2 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 8px;">Asignar Préstamo - Paso 2: Configuración</h2>
+        <p style="color: var(--text-muted); font-size: 1rem;">Complete los detalles financieros para la solicitud de préstamo del cliente.</p>
+    </div>
+
+    <div class="form-card">
+        <div class="client-header">
+            <div class="client-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            </div>
+            <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">CLIENTE SELECCIONADO</div>
+                <div style="font-size: 1.2rem; font-weight: 600; color: white;">@Model.ClientName</div>
+                <div style="font-size: 0.85rem; color: var(--cyan-accent); display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                    <span style="height: 6px; width: 6px; background-color: var(--cyan-accent); border-radius: 50%; display: inline-block;"></span>
+                    Cédula: @Model.ClientCedula
+                </div>
+            </div>
+        </div>
+
+        <form asp-action="AssignLoanStep2" method="post" id="loanForm">
+            <input type="hidden" asp-for="ClientId" />
+            <input type="hidden" asp-for="ClientName" />
+            <input type="hidden" asp-for="ClientCedula" />
+
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="Amount">Monto a prestar</label>
+                    <div style="position: relative;">
+                        <span style="position: absolute; left: 15px; top: 12px; color: var(--text-muted); font-weight: 600;">RD$</span>
+                        <input asp-for="Amount" type="number" step="0.01" class="custom-input" style="padding-left: 55px;" placeholder="0.00" id="inputAmount" />
+                    </div>
+                    <span asp-validation-for="Amount" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+                
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="InterestRate">Tasa de interés anual</label>
+                    <div style="position: relative;">
+                        <input asp-for="InterestRate" type="number" step="0.01" class="custom-input" style="padding-right: 40px;" placeholder="0.00" id="inputRate" />
+                        <span style="position: absolute; right: 15px; top: 12px; color: var(--text-muted); font-weight: 600;">%</span>
+                    </div>
+                    <span asp-validation-for="InterestRate" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+
+                <div class="col-12">
+                    <label class="custom-label" asp-for="TermInMonths">Plazo del préstamo</label>
+                    <select asp-for="TermInMonths" class="custom-select" id="inputTerm">
+                        <option value="">Seleccione el plazo</option>
+                        @for (int i = 6; i <= 60; i += 6)
+                        {
+                            <option value="@i">@i meses</option>
+                        }
+                    </select>
+                    <span asp-validation-for="TermInMonths" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+            </div>
+
+            <div class="estimated-quote-box">
+                <span style="color: var(--text-muted); font-weight: 600;">Cuota mensual estimada</span>
+                <span style="color: var(--cyan-accent); font-size: 1.4rem; font-weight: 700;" id="estimatedQuoteDisplay">RD$ 0.00</span>
+            </div>
+
+            <div class="info-note">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-accent)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <div style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5;">
+                    Nota: Este préstamo utiliza el sistema francés de amortización (cuotas fijas). Tras la aprobación final, los fondos serán desembolsados automáticamente en la cuenta principal de ahorro vinculada al cliente.
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-3 mt-4">
+                <a asp-action="AssignLoanStep1" class="btn-outline">Volver atrás</a>
+                <button type="submit" class="btn-next">Asignar préstamo &rarr;</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const amountInput = document.getElementById("inputAmount");
+            const rateInput = document.getElementById("inputRate");
+            const termInput = document.getElementById("inputTerm");
+            const display = document.getElementById("estimatedQuoteDisplay");
+
+            function calculateQuote() {
+                const P = parseFloat(amountInput.value);
+                const annualRate = parseFloat(rateInput.value);
+                const n = parseInt(termInput.value);
+
+                if (!P || isNaN(annualRate) || !n || P <= 0 || n <= 0) {
+                    display.innerText = "RD$ 0.00";
+                    return;
+                }
+
+                if (annualRate === 0) {
+                    display.innerText = "RD$ " + (P / n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    return;
+                }
+
+                // French system formula
+                const r = (annualRate / 100) / 12;
+                const rn = Math.pow(1 + r, n);
+                const C = P * (r * rn) / (rn - 1);
+
+                display.innerText = "RD$ " + C.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+
+            amountInput.addEventListener("input", calculateQuote);
+            rateInput.addEventListener("input", calculateQuote);
+            termInput.addEventListener("change", calculateQuote);
+        });
+    </script>
+}

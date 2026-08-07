@@ -1,0 +1,190 @@
+@model Application.Models.ViewModels.Admin.AdminDashboardViewModel
+@{
+    ViewData["Title"] = "Panel Administrativo";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .stat-card {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    
+    .stat-card:hover {
+        border-color: rgba(0, 229, 255, 0.4);
+    }
+
+    .stat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 20px;
+    }
+
+    .stat-title {
+        color: var(--text-muted);
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .stat-icon {
+        background-color: rgba(0, 229, 255, 0.1);
+        color: var(--cyan-accent);
+        padding: 10px;
+        border-radius: 8px;
+    }
+
+    .stat-value {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: var(--text-main);
+        line-height: 1.1;
+    }
+    
+    .stat-subtitle {
+        font-size: 0.8rem;
+        color: #55657E;
+        margin-top: 8px;
+    }
+</style>
+
+<div class="mb-5">
+    <h2 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 8px;">Panel de Control Administrativo</h2>
+    <p style="color: var(--text-muted); font-size: 1rem;">Resumen general de operaciones y estado de la plataforma</p>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">Transacciones Históricas</span>
+                <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></div>
+            </div>
+            <div>
+                <div class="stat-value">@Model.TotalHistoricalTransactions</div>
+                <div class="stat-subtitle">Desde el inicio del sistema</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">Transacciones del Día</span>
+                <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></div>
+            </div>
+            <div>
+                <div class="stat-value" style="color: var(--cyan-accent);">@Model.DailyTransactions</div>
+                <div class="stat-subtitle">Registradas en fecha actual</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">Total Pagos Históricos</span>
+                <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg></div>
+            </div>
+            <div>
+                <div class="stat-value">@Model.TotalHistoricalPayments</div>
+                <div class="stat-subtitle">Procesados correctamente</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">Pagos del Día</span>
+                <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></div>
+            </div>
+            <div>
+                <div class="stat-value" style="color: var(--cyan-accent);">@Model.DailyPayments</div>
+                <div class="stat-subtitle">Abonos en fecha actual</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">Clientes Activos</span>
+                <div class="stat-icon" style="background-color: rgba(0, 229, 137, 0.1); color: #00E589;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg></div>
+            </div>
+            <div>
+                <div class="stat-value">@Model.ActiveClients</div>
+                <div class="stat-subtitle">Estado operativo</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-header">
+                <span class="stat-title">Clientes Inactivos</span>
+                <div class="stat-icon" style="background-color: rgba(255, 107, 107, 0.1); color: #FF6B6B;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="18" y1="8" x2="23" y2="13"></line><line x1="23" y1="8" x2="18" y2="13"></line></svg></div>
+            </div>
+            <div>
+                <div class="stat-value">@Model.InactiveClients</div>
+                <div class="stat-subtitle">Requieren revisión</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="stat-card" style="background: linear-gradient(145deg, #1A2436 0%, #141C2B 100%); border: 1px solid rgba(0,229,255,0.3);">
+            <div class="stat-header">
+                <span class="stat-title text-white">Monto Promedio Deuda</span>
+                <div class="stat-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg></div>
+            </div>
+            <div>
+                <div class="stat-value">RD$ @Model.AverageDebtPerClient.ToString("N2")</div>
+                <div class="stat-subtitle">Calculado por cliente activo</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="row g-4">
+    <div class="col-6 col-xl-3">
+        <div class="stat-card" style="padding: 20px;">
+            <span class="stat-title" style="font-size: 0.7rem;">Total Productos Financieros</span>
+            <div class="stat-value" style="font-size: 1.8rem; margin-top: 10px;">@Model.TotalFinancialProducts</div>
+        </div>
+    </div>
+    
+    <div class="col-6 col-xl-3">
+        <div class="stat-card" style="padding: 20px;">
+            <span class="stat-title" style="font-size: 0.7rem;">Préstamos Vigentes</span>
+            <div class="stat-value" style="font-size: 1.8rem; margin-top: 10px;">@Model.ActiveLoans</div>
+        </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+        <div class="stat-card" style="padding: 20px;">
+            <span class="stat-title" style="font-size: 0.7rem;">Tarjetas de Crédito Activas</span>
+            <div class="stat-value" style="font-size: 1.8rem; margin-top: 10px;">@Model.ActiveCreditCards</div>
+        </div>
+    </div>
+
+    <div class="col-6 col-xl-3">
+        <div class="stat-card" style="padding: 20px;">
+            <span class="stat-title" style="font-size: 0.7rem;">Cuentas de Ahorro Activas</span>
+            <div class="stat-value" style="font-size: 1.8rem; margin-top: 10px;">@Model.ActiveSavingsAccounts</div>
+        </div>
+    </div>
+</div>

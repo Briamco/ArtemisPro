@@ -1,0 +1,81 @@
+@model Application.Models.ViewModels.Admin.AssignCardStep2ViewModel
+@{
+    ViewData["Title"] = "Asignación de Tarjeta";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .module-container { background-color: var(--bg-main); min-height: 100%; }
+    .form-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 30px; max-width: 700px; }
+    
+    .client-header { background-color: #0B101E; border-radius: 8px; padding: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; border: 1px solid var(--border-color); }
+    
+    .custom-label { color: white; font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; display: block; }
+    .custom-input { background-color: #080D17; border: 1px solid var(--border-color); color: white; padding: 12px 16px; border-radius: 8px; width: 100%; outline: none; font-size: 1.1rem;}
+    .custom-input:focus { border-color: var(--cyan-accent); }
+    
+    .info-note { background-color: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); border-radius: 8px; padding: 15px; display: flex; gap: 12px; }
+    
+    .btn-outline { background-color: transparent; color: white; border: 1px solid var(--border-color); padding: 12px 24px; border-radius: 8px; font-weight: 600; text-decoration: none; }
+    .btn-next { background-color: var(--cyan-accent); color: #000; border: none; padding: 12px 30px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+</style>
+
+<div class="module-container">
+    <div class="mb-4">
+        <h2 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 8px;">Asignación de Tarjeta de Crédito</h2>
+        <p style="color: var(--text-muted); font-size: 1rem;">Configure los parámetros financieros para el nuevo producto.</p>
+    </div>
+
+    <div class="form-card">
+        <div style="font-size: 0.75rem; color: white; font-weight: 700; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px;">DATOS DEL CLIENTE</div>
+        <div class="client-header">
+            <div class="d-flex align-items-center gap-3">
+                <div style="width: 50px; height: 50px; border-radius: 50%; background-color: #1A2436; color: var(--text-muted); display: flex; align-items: center; justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div>
+                <div>
+                    <div style="font-size: 1.2rem; font-weight: 600; color: white;">@Model.ClientName</div>
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">ID: @Model.ClientCedula - Cliente Preferencial</div>
+                </div>
+            </div>
+            <span style="background-color: rgba(0, 229, 255, 0.1); color: var(--cyan-accent); font-size: 0.75rem; font-weight: 600; padding: 6px 12px; border-radius: 20px;">Pre-aprobado</span>
+        </div>
+
+        <div style="font-size: 0.75rem; color: white; font-weight: 700; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">PARÁMETROS DE LA TARJETA</div>
+
+        <form asp-action="AssignCardStep2" method="post">
+            <input type="hidden" asp-for="ClientId" />
+            <input type="hidden" asp-for="ClientName" />
+            <input type="hidden" asp-for="ClientCedula" />
+            
+            <div class="row align-items-start mt-4">
+                <div class="col-md-7">
+                    <label class="custom-label" asp-for="CreditLimit">Límite de crédito (RD$)</label>
+                    <div style="position: relative; margin-bottom: 10px;">
+                        <span style="position: absolute; left: 15px; top: 12px; color: white; font-weight: 600; font-size: 1.1rem;">$</span>
+                        <input asp-for="CreditLimit" type="number" step="0.01" class="custom-input" style="padding-left: 35px;" placeholder="0.00" />
+                    </div>
+                    <span asp-validation-for="CreditLimit" class="text-danger" style="font-size: 0.8rem; display: block; margin-bottom: 10px;"></span>
+                    <div style="color: var(--text-muted); font-size: 0.75rem; display: flex; align-items: center; gap: 5px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg> Ingrese el monto máximo permitido para transacciones.
+                    </div>
+                </div>
+                
+                <div class="col-md-5">
+                    <div class="info-note h-100">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-accent)" stroke-width="2" style="flex-shrink: 0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <div>
+                            <strong style="color: white; font-size: 0.85rem; display: block; margin-bottom: 5px;">Información de Sistema</strong>
+                            <span style="color: var(--text-muted); font-size: 0.8rem;">La deuda inicial será de <strong style="color: white;">RD$0.00</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-3 mt-5">
+                <a asp-action="AssignCardStep1" class="btn-outline">Volver atrás</a>
+                <button type="submit" class="btn-next">Asignar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }
