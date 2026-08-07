@@ -12,6 +12,7 @@ public class AutoMapperProfile : Profile
         // Identity
         CreateMap<ApplicationUser, UserDto>()
             .ForMember(dest => dest.Role, opt => opt.Ignore());
+        CreateMap<CreateUserDto, ApplicationUser>();
 
         // Banking
         CreateMap<SavingsAccount, SavingsAccountDto>()
