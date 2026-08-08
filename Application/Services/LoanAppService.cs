@@ -66,12 +66,9 @@ public class LoanAppService : ILoanAppService
 
         // 2. Calculate Current Debt of the Client
         var clientLoans = await _unitOfWork.Loans.GetByClientIdAsync(dto.ClientId);
-        var activeLoansDebt = clientLoans.Where(l => l.Status == LoanStatus.Activo)
-            .Sum(l => l.Installments?.Where(i => i.PaymentStatus == PaymentStatus.Pendiente).Sum(i => i.Amount) ?? 0); 
-            // Better to fetch installments if they are not loaded, or simply use a query. 
-            // Let's assume we can query installments directly to be safe.
+        var activeClientLoans = clientLoans.Where(l => l.Status == LoanStatus.Activo).ToList();
         
-        var allClientInstallments = await _unitOfWork.LoanInstallments.FindAsync(i => clientLoans.Select(cl => cl.Id).Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
+        var allClientInstallments = await _unitOfWork.LoanInstallments.FindAsync(i => activeClientLoans.Select(cl => cl.Id).Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
         var currentLoansDebt = allClientInstallments.Sum(i => i.Amount);
 
         var clientCards = await _unitOfWork.CreditCards.GetByClientIdAsync(dto.ClientId);
@@ -161,18 +158,10 @@ public class LoanAppService : ILoanAppService
             return (0, false);
         }
 
-        decimal totalDebt = 0;
-
-        foreach (var clientId in clientsWithDebt)
-        {
-            var clientLoans = activeLoans.Where(l => l.ClientId == clientId);
-            var clientLoanIds = clientLoans.Select(l => l.Id).ToList();
-            
-            var installments = await _unitOfWork.LoanInstallments.FindAsync(i => clientLoanIds.Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
-            totalDebt += installments.Sum(i => i.Amount);
-
-            totalDebt += activeCards.Where(c => c.ClientId == clientId).Sum(c => c.Debt);
-        }
+        var activeLoanIds = activeLoans.Select(l => l.Id).ToList();
+        var allPendingInstallments = await _unitOfWork.LoanInstallments.FindAsync(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
+        
+        decimal totalDebt = allPendingInstallments.Sum(i => i.Amount) + activeCards.Sum(c => c.Debt);
 
         return (totalDebt / clientsWithDebt.Count, true);
     }
