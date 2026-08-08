@@ -75,17 +75,34 @@ public class LoanAppService : ILoanAppService
 
         // 3. Calculate Projected Debt
         decimal monthlyInterestRate = (dto.AnnualInterestRate / 100m) / 12m;
-        decimal totalToPayNewLoan = 0;
+        decimal baseMonthlyPayment = 0;
 
         if (monthlyInterestRate > 0)
         {
             var factor = (decimal)Math.Pow((double)(1 + monthlyInterestRate), dto.Term);
-            var monthlyPayment = dto.ApprovedAmount * (monthlyInterestRate * factor) / (factor - 1);
-            totalToPayNewLoan = monthlyPayment * dto.Term;
+            baseMonthlyPayment = Math.Round(dto.ApprovedAmount * (monthlyInterestRate * factor) / (factor - 1), 2);
         }
         else
         {
-            totalToPayNewLoan = dto.ApprovedAmount;
+            baseMonthlyPayment = Math.Round(dto.ApprovedAmount / dto.Term, 2);
+        }
+
+        decimal totalToPayNewLoan = 0;
+        decimal tempBalance = dto.ApprovedAmount;
+        for (int i = 1; i <= dto.Term; i++)
+        {
+            decimal interestAmount = Math.Round(tempBalance * monthlyInterestRate, 2);
+            decimal capitalAmount = Math.Round(baseMonthlyPayment - interestAmount, 2);
+            decimal paymentAmount = baseMonthlyPayment;
+
+            if (i == dto.Term)
+            {
+                capitalAmount = Math.Round(tempBalance, 2);
+                paymentAmount = Math.Round(capitalAmount + interestAmount, 2);
+            }
+
+            tempBalance -= capitalAmount;
+            totalToPayNewLoan += paymentAmount;
         }
 
         var projectedDebt = currentDebt + totalToPayNewLoan;
@@ -140,7 +157,7 @@ public class LoanAppService : ILoanAppService
         await _unitOfWork.SaveChangesAsync();
 
         // Generate Installments
-        await GenerateInstallmentsAsync(loan, monthlyInterestRate, totalToPayNewLoan / dto.Term);
+        await GenerateInstallmentsAsync(loan, monthlyInterestRate, baseMonthlyPayment);
         
         // Credit approved amount to primary savings account
         var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
@@ -242,13 +259,14 @@ public class LoanAppService : ILoanAppService
 
         for (int i = 1; i <= loan.Term; i++)
         {
-            decimal interestAmount = pendingBalance * monthlyInterestRate;
-            decimal capitalAmount = monthlyPayment - interestAmount;
+            decimal interestAmount = Math.Round(pendingBalance * monthlyInterestRate, 2);
+            decimal capitalAmount = Math.Round(monthlyPayment - interestAmount, 2);
+            decimal paymentAmount = monthlyPayment;
 
             if (i == loan.Term) // Adjust last payment to fix decimals
             {
-                capitalAmount = pendingBalance;
-                monthlyPayment = capitalAmount + interestAmount;
+                capitalAmount = Math.Round(pendingBalance, 2);
+                paymentAmount = Math.Round(capitalAmount + interestAmount, 2);
             }
 
             pendingBalance -= capitalAmount;
@@ -258,10 +276,10 @@ public class LoanAppService : ILoanAppService
                 LoanId = loan.Id,
                 InstallmentNumber = i,
                 DueDate = loan.CreatedAt.AddMonths(i),
-                Amount = monthlyPayment,
+                Amount = paymentAmount,
                 InterestAmount = interestAmount,
                 CapitalAmount = capitalAmount,
-                PendingBalance = Math.Max(0, pendingBalance), // Prevent negative balance
+                PendingBalance = paymentAmount, // Monto pendiente por pagar de esa cuota
                 PaymentStatus = PaymentStatus.Pendiente,
                 IsOverdue = false
             };
