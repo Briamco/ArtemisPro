@@ -21,4 +21,6 @@ public class CreateLoanDto
 
     [Required(ErrorMessage = "El identificador del administrador es requerido.")]
     public Guid AdminId { get; set; }
+
+    public bool ConfirmHighRisk { get; set; } = false;
 }

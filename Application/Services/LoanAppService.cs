@@ -8,6 +8,7 @@ using Application.Interfaces.Services;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Enums;
+using Shared.Interfaces;
 
 namespace Application.Services;
 
@@ -15,11 +16,13 @@ public class LoanAppService : ILoanAppService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly IEmailService _emailService;
 
-    public LoanAppService(IUnitOfWork unitOfWork, IMapper mapper)
+    public LoanAppService(IUnitOfWork unitOfWork, IMapper mapper, IEmailService emailService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _emailService = emailService;
     }
 
     public async Task<IEnumerable<LoanDto>> GetLoansAsync(string? status = null, string? cedula = null)
@@ -55,34 +58,20 @@ public class LoanAppService : ILoanAppService
         return _mapper.Map<IEnumerable<LoanInstallmentDto>>(installments.OrderBy(i => i.InstallmentNumber));
     }
 
-    public async Task<(bool Success, string? Error, string? WarningMessage, bool IsHighRisk)> CreateLoanAsync(CreateLoanDto dto)
+    public async Task<LoanCreationResult> CreateLoanAsync(CreateLoanDto dto)
     {
         var client = await _unitOfWork.Users.GetByIdAsync(dto.ClientId);
         if (client == null)
-            return (false, "Cliente no encontrado.", null, false);
+            return new LoanCreationResult { Success = false, ErrorMessage = "Cliente no encontrado." };
 
         // 1. Calculate Average Debt of the System
         var (averageDebt, hasClients) = await GetAverageDebtAsync();
 
         // 2. Calculate Current Debt of the Client
-        var activeClientLoansQuery = _unitOfWork.Loans.Query().Where(l => l.ClientId == dto.ClientId && l.Status == LoanStatus.Activo);
-        var activeClientLoanIds = activeClientLoansQuery.Select(l => l.Id);
-        
-        var clientInstallmentsQuery = _unitOfWork.LoanInstallments.Query()
-            .Where(i => activeClientLoanIds.Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
-        
-        var currentLoansDebt = clientInstallmentsQuery.Any() ? clientInstallmentsQuery.Sum(i => i.Amount) : 0;
-
-        var clientCardsQuery = _unitOfWork.CreditCards.Query().Where(c => c.ClientId == dto.ClientId && c.Status == CardStatus.Activa);
-        var currentCardsDebt = clientCardsQuery.Any() ? clientCardsQuery.Sum(c => c.Debt) : 0;
+        var currentLoansDebt = await _unitOfWork.LoanInstallments.GetTotalPendingDebtByClientIdAsync(dto.ClientId);
+        var currentCardsDebt = await _unitOfWork.CreditCards.GetTotalActiveDebtByClientIdAsync(dto.ClientId);
 
         var currentDebt = currentLoansDebt + currentCardsDebt;
-
-        // Check if currently above average debt
-        if (hasClients && currentDebt > averageDebt)
-        {
-            return (false, null, "Este cliente se considera de alto riesgo, ya que su deuda actual supera el promedio del sistema.", true);
-        }
 
         // 3. Calculate Projected Debt
         decimal monthlyInterestRate = (dto.AnnualInterestRate / 100m) / 12m;
@@ -101,17 +90,44 @@ public class LoanAppService : ILoanAppService
 
         var projectedDebt = currentDebt + totalToPayNewLoan;
 
-        // Check if projected debt above average debt
-        if (hasClients && projectedDebt > averageDebt)
+        // 4. Validate High Risk
+        if (hasClients && !dto.ConfirmHighRisk)
         {
-            return (false, null, "Asignar este préstamo convertirá al cliente en un cliente de alto riesgo, ya que su deuda superará el umbral promedio del sistema.", true);
+            if (currentDebt > averageDebt)
+            {
+                return new LoanCreationResult
+                {
+                    Success = false,
+                    IsHighRiskConflict = true,
+                    RiskType = "CurrentHighRisk",
+                    CurrentDebt = currentDebt,
+                    ProjectedDebt = projectedDebt,
+                    AverageDebt = averageDebt,
+                    ErrorMessage = "Este cliente se considera de alto riesgo, ya que su deuda actual supera el promedio del sistema."
+                };
+            }
+
+            if (projectedDebt > averageDebt)
+            {
+                return new LoanCreationResult
+                {
+                    Success = false,
+                    IsHighRiskConflict = true,
+                    RiskType = "ProjectedHighRisk",
+                    CurrentDebt = currentDebt,
+                    ProjectedDebt = projectedDebt,
+                    AverageDebt = averageDebt,
+                    ErrorMessage = "Asignar este préstamo convertirá al cliente en un cliente de alto riesgo, ya que su deuda superará el umbral promedio del sistema."
+                };
+            }
         }
 
         // Proceed to create loan
+        var loanNumber = await GenerateUniqueLoanNumberAsync();
         var loan = new Loan
         {
             ClientId = dto.ClientId,
-            LoanNumber = GenerateLoanNumber(),
+            LoanNumber = loanNumber,
             ApprovedAmount = dto.ApprovedAmount,
             Term = dto.Term,
             AnnualInterestRate = dto.AnnualInterestRate,
@@ -125,9 +141,47 @@ public class LoanAppService : ILoanAppService
 
         // Generate Installments
         await GenerateInstallmentsAsync(loan, monthlyInterestRate, totalToPayNewLoan / dto.Term);
+        
+        // Credit approved amount to primary savings account
+        var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
+        if (primaryAccount != null)
+        {
+            primaryAccount.Balance += dto.ApprovedAmount;
+            _unitOfWork.SavingsAccounts.Update(primaryAccount);
+
+            var transaction = new Transaction
+            {
+                SavingsAccountId = primaryAccount.Id,
+                Amount = dto.ApprovedAmount,
+                Type = TransactionType.Credito,
+                Status = TransactionStatus.Aprobada,
+                Date = DateTime.UtcNow,
+                Origin = "Desembolso de Préstamo",
+                Beneficiary = $"{client.FirstName} {client.LastName}"
+            };
+            
+            await _unitOfWork.Transactions.AddAsync(transaction);
+        }
+
         await _unitOfWork.SaveChangesAsync();
 
-        return (true, null, null, false);
+        // Send email notification
+        var subject = "Aprobación de Préstamo";
+        var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Su préstamo número {loan.LoanNumber} por un monto de {dto.ApprovedAmount:C} ha sido aprobado y acreditado a su cuenta principal.<br><br>Gracias por confiar en nosotros.";
+        try
+        {
+            if (!string.IsNullOrEmpty(client.Email))
+            {
+                await _emailService.SendAsync(client.Email, subject, body);
+            }
+        }
+        catch (Exception)
+        {
+            // Se silencia la excepción para no abortar la creación del préstamo
+            // si el servicio de mensajería falla.
+        }
+
+        return new LoanCreationResult { Success = true };
     }
 
     public async Task<(bool Success, string? Error)> UpdateLoanRateAsync(Guid id, UpdateLoanRateDto dto)
@@ -144,33 +198,41 @@ public class LoanAppService : ILoanAppService
 
     public async Task<(decimal AverageDebt, bool HasClients)> GetAverageDebtAsync()
     {
-        var activeLoansQuery = _unitOfWork.Loans.Query().Where(l => l.Status == LoanStatus.Activo);
-        var activeCardsQuery = _unitOfWork.CreditCards.Query().Where(c => c.Status == CardStatus.Activa);
+        var activeClientsCount = await _unitOfWork.GetActiveClientsCountAsync();
 
-        var clientsWithLoan = activeLoansQuery.Select(l => l.ClientId);
-        var clientsWithCard = activeCardsQuery.Select(c => c.ClientId);
-        var clientsWithDebtCount = clientsWithLoan.Union(clientsWithCard).Distinct().Count();
-
-        if (clientsWithDebtCount == 0)
+        if (activeClientsCount == 0)
         {
             return (0, false);
         }
 
-        var activeLoanIds = activeLoansQuery.Select(l => l.Id);
-        var allPendingInstallmentsQuery = _unitOfWork.LoanInstallments.Query()
-            .Where(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
-        
-        decimal totalInstallmentsDebt = allPendingInstallmentsQuery.Any() ? allPendingInstallmentsQuery.Sum(i => i.Amount) : 0;
-        decimal totalCardsDebt = activeCardsQuery.Any() ? activeCardsQuery.Sum(c => c.Debt) : 0;
+        decimal totalInstallmentsDebt = await _unitOfWork.LoanInstallments.GetTotalSystemPendingDebtAsync();
+        decimal totalCardsDebt = await _unitOfWork.CreditCards.GetTotalSystemActiveDebtAsync();
 
         decimal totalDebt = totalInstallmentsDebt + totalCardsDebt;
 
-        return (totalDebt / clientsWithDebtCount, true);
+        return (totalDebt / activeClientsCount, true);
     }
 
-    private string GenerateLoanNumber()
+    private async Task<string> GenerateUniqueLoanNumberAsync()
     {
-        return $"LN-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+        var random = new Random();
+        string number;
+        bool isUnique = false;
+        
+        while (!isUnique)
+        {
+            number = random.Next(100000000, 1000000000).ToString();
+            var existingLoan = await _unitOfWork.Loans.FindAsync(l => l.LoanNumber == number);
+            var existingAccount = await _unitOfWork.SavingsAccounts.GetByAccountNumberAsync(number);
+            
+            if (!existingLoan.Any() && existingAccount == null)
+            {
+                isUnique = true;
+                return number;
+            }
+        }
+        
+        return string.Empty;
     }
 
     private async Task GenerateInstallmentsAsync(Loan loan, decimal monthlyInterestRate, decimal monthlyPayment)

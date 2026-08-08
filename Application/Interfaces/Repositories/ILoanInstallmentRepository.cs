@@ -9,4 +9,6 @@ public interface ILoanInstallmentRepository : IBaseRepository<LoanInstallment>
 {
     Task<IEnumerable<LoanInstallment>> GetByLoanIdAsync(Guid loanId);
     Task<IEnumerable<LoanInstallment>> GetOverdueInstallmentsAsync();
+    Task<decimal> GetTotalPendingDebtByClientIdAsync(Guid clientId);
+    Task<decimal> GetTotalSystemPendingDebtAsync();
 }
