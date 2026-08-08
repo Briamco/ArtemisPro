@@ -65,14 +65,16 @@ public class LoanAppService : ILoanAppService
         var (averageDebt, hasClients) = await GetAverageDebtAsync();
 
         // 2. Calculate Current Debt of the Client
-        var clientLoans = await _unitOfWork.Loans.GetByClientIdAsync(dto.ClientId);
-        var activeClientLoans = clientLoans.Where(l => l.Status == LoanStatus.Activo).ToList();
+        var activeClientLoansQuery = _unitOfWork.Loans.Query().Where(l => l.ClientId == dto.ClientId && l.Status == LoanStatus.Activo);
+        var activeClientLoanIds = activeClientLoansQuery.Select(l => l.Id);
         
-        var allClientInstallments = await _unitOfWork.LoanInstallments.FindAsync(i => activeClientLoans.Select(cl => cl.Id).Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
-        var currentLoansDebt = allClientInstallments.Sum(i => i.Amount);
+        var clientInstallmentsQuery = _unitOfWork.LoanInstallments.Query()
+            .Where(i => activeClientLoanIds.Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
+        
+        var currentLoansDebt = clientInstallmentsQuery.Any() ? clientInstallmentsQuery.Sum(i => i.Amount) : 0;
 
-        var clientCards = await _unitOfWork.CreditCards.GetByClientIdAsync(dto.ClientId);
-        var currentCardsDebt = clientCards.Where(c => c.Status == CardStatus.Activa).Sum(c => c.Debt);
+        var clientCardsQuery = _unitOfWork.CreditCards.Query().Where(c => c.ClientId == dto.ClientId && c.Status == CardStatus.Activa);
+        var currentCardsDebt = clientCardsQuery.Any() ? clientCardsQuery.Sum(c => c.Debt) : 0;
 
         var currentDebt = currentLoansDebt + currentCardsDebt;
 
@@ -114,8 +116,8 @@ public class LoanAppService : ILoanAppService
             Term = dto.Term,
             AnnualInterestRate = dto.AnnualInterestRate,
             Status = LoanStatus.Activo,
-            CreatedAt = DateTime.UtcNow
-            // AdminId should be set here, but we lack it in DTO. Assuming it's set in controller or default empty guid
+            CreatedAt = DateTime.UtcNow,
+            AdminId = dto.AdminId
         };
 
         await _unitOfWork.Loans.AddAsync(loan);
@@ -142,28 +144,28 @@ public class LoanAppService : ILoanAppService
 
     public async Task<(decimal AverageDebt, bool HasClients)> GetAverageDebtAsync()
     {
-        var allLoans = await _unitOfWork.Loans.GetAllAsync();
-        var allCards = await _unitOfWork.CreditCards.GetAllAsync();
-        
-        var activeLoans = allLoans.Where(l => l.Status == LoanStatus.Activo).ToList();
-        var activeCards = allCards.Where(c => c.Status == CardStatus.Activa).ToList();
+        var activeLoansQuery = _unitOfWork.Loans.Query().Where(l => l.Status == LoanStatus.Activo);
+        var activeCardsQuery = _unitOfWork.CreditCards.Query().Where(c => c.Status == CardStatus.Activa);
 
-        var clientsWithDebt = activeLoans.Select(l => l.ClientId)
-            .Union(activeCards.Select(c => c.ClientId))
-            .Distinct()
-            .ToList();
+        var clientsWithLoan = activeLoansQuery.Select(l => l.ClientId);
+        var clientsWithCard = activeCardsQuery.Select(c => c.ClientId);
+        var clientsWithDebtCount = clientsWithLoan.Union(clientsWithCard).Distinct().Count();
 
-        if (!clientsWithDebt.Any())
+        if (clientsWithDebtCount == 0)
         {
             return (0, false);
         }
 
-        var activeLoanIds = activeLoans.Select(l => l.Id).ToList();
-        var allPendingInstallments = await _unitOfWork.LoanInstallments.FindAsync(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
+        var activeLoanIds = activeLoansQuery.Select(l => l.Id);
+        var allPendingInstallmentsQuery = _unitOfWork.LoanInstallments.Query()
+            .Where(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus == PaymentStatus.Pendiente);
         
-        decimal totalDebt = allPendingInstallments.Sum(i => i.Amount) + activeCards.Sum(c => c.Debt);
+        decimal totalInstallmentsDebt = allPendingInstallmentsQuery.Any() ? allPendingInstallmentsQuery.Sum(i => i.Amount) : 0;
+        decimal totalCardsDebt = activeCardsQuery.Any() ? activeCardsQuery.Sum(c => c.Debt) : 0;
 
-        return (totalDebt / clientsWithDebt.Count, true);
+        decimal totalDebt = totalInstallmentsDebt + totalCardsDebt;
+
+        return (totalDebt / clientsWithDebtCount, true);
     }
 
     private string GenerateLoanNumber()
