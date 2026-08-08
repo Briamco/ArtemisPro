@@ -1,0 +1,120 @@
+@model Application.Models.ViewModels.Admin.AssignLoanStep1ViewModel
+@{
+    ViewData["Title"] = "Asignar Préstamo - Paso 1";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .module-container { background-color: var(--bg-main); min-height: 100%; }
+    .info-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; flex: 1; }
+    
+    .btn-outline { background-color: transparent; color: white; border: 1px solid var(--border-color); padding: 12px 24px; border-radius: 8px; font-weight: 600; text-decoration: none; }
+    .btn-next { background-color: var(--cyan-accent); color: #000; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;}
+    
+    .custom-table { width: 100%; color: white; border-collapse: separate; border-spacing: 0 15px; }
+    .custom-table th { color: var(--text-muted); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 0 15px 10px 15px; border-bottom: 1px solid var(--border-color); }
+    .custom-table td { padding: 15px; background-color: #0B101E; font-size: 0.9rem; vertical-align: middle; }
+    .custom-table tr td:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+    .custom-table tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+    
+    
+    .custom-radio { position: relative; padding-left: 30px; cursor: pointer; user-select: none; display: inline-flex; align-items: center; margin-bottom: 0; min-height: 20px; }
+    .custom-radio input { position: absolute; opacity: 0; cursor: pointer; }
+    .checkmark { position: absolute; top: 50%; transform: translateY(-50%); left: 0; height: 20px; width: 20px; background-color: transparent; border: 2px solid var(--border-color); border-radius: 50%; }
+    .custom-radio:hover input ~ .checkmark { border-color: var(--cyan-accent); }
+    .custom-radio input:checked ~ .checkmark { border-color: var(--cyan-accent); }
+    .checkmark:after { content: ""; position: absolute; display: none; }
+    .custom-radio input:checked ~ .checkmark:after { display: block; }
+    .custom-radio .checkmark:after { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; border-radius: 50%; background: var(--cyan-accent); }
+</style>
+
+<div class="module-container">
+    <div class="mb-4">
+        <h2 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 8px;">Asignar Préstamo - Paso 1: Seleccionar Cliente</h2>
+        <p style="color: var(--text-muted); font-size: 1rem;">Seleccione un cliente activo sin préstamos vigentes para iniciar la solicitud.</p>
+    </div>
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger" style="background-color: rgba(255, 107, 107, 0.1); border: 1px solid #FF6B6B; color: #FF6B6B; border-radius: 8px; padding: 15px; margin-bottom: 24px;">
+            @TempData["ErrorMessage"]
+        </div>
+    }
+
+    <div class="d-flex gap-4 mb-4">
+        <div class="info-card" style="max-width: 350px;">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-accent)" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                <span style="color: var(--text-muted); font-weight: 600; font-size: 0.85rem; letter-spacing: 1px;">DEUDA PROMEDIO</span>
+            </div>
+            <div style="font-size: 2.5rem; font-weight: 700; color: white;">
+                <span style="font-size: 1.5rem; color: var(--cyan-accent);">RD$</span> @Model.AverageSystemDebt.ToString("N2")
+            </div>
+            <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 5px;">Clientes activos en el sistema</div>
+        </div>
+
+        <!-- Tarjeta Búsqueda -->
+        <div class="info-card">
+            <h5 style="color: white; margin-bottom: 20px; font-weight: 600;">Búsqueda de Cliente</h5>
+            <form asp-action="AssignLoanStep1" method="get">
+                <div class="d-flex gap-3">
+                    <div style="flex: 1; position: relative;">
+                        <svg style="position: absolute; left: 15px; top: 12px; color: var(--text-muted);" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        <input type="text" name="searchCedula" value="@Model.SearchCedula" class="form-control" style="background-color: #080D17; border: 1px solid var(--border-color); color: white; padding: 10px 15px 10px 45px; border-radius: 8px; width: 100%;" placeholder="Buscar por Cédula (Ej: 001-XXXXXXX-X)" />
+                    </div>
+                    <button type="submit" class="btn-create" style="padding: 10px 30px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Buscar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de Clientes (Formulario) -->
+    <form asp-action="AssignLoanStep1" method="post">
+        <div class="info-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 style="color: white; font-weight: 600; letter-spacing: 1px;">CLIENTES ELEGIBLES</h6>
+                <span style="background-color: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 12px; font-size: 0.8rem; color: var(--text-muted);">@Model.EligibleClients.Count resultados</span>
+            </div>
+
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>Sel.</th>
+                        <th>Cédula</th>
+                        <th>Nombre y Apellido</th>
+                        <th>Correo Electrónico</th>
+                        <th style="text-align: right;">Monto Total de Deuda</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var client in Model.EligibleClients)
+                    {
+                        <tr>
+                            <td>
+                                <label class="custom-radio">
+                                    <input type="radio" name="SelectedClientId" value="@client.Id">
+                                    <span class="checkmark"></span>
+                                </label>
+                            </td>
+                            <td style="color: var(--cyan-accent);">@client.Cedula</td>
+                            <td style="font-weight: 600;">@client.FullName</td>
+                            <td style="color: var(--text-muted);">@client.Email</td>
+                            <td style="text-align: right; color: var(--text-muted);">RD$ @client.TotalDebt.ToString("N2")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                <a asp-action="LoanManagement" class="btn-outline">
+                    &larr; Volver atrás
+                </a>
+                <button type="submit" class="btn-next">
+                    Siguiente paso &rarr;
+                </button>
+            </div>
+        </div>
+    </form>
+</div>

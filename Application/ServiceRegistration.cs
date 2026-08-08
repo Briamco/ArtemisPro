@@ -12,6 +12,7 @@ public static class ServiceRegistration
         services.AddScoped<IAuthAppService, AuthAppService>();
         services.AddScoped<IUserAppService, UserAppService>();
         services.AddScoped<ILoanAppService, LoanAppService>();
+        services.AddScoped<IAdminDashboardAppService, AdminDashboardAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
         return services;
     }

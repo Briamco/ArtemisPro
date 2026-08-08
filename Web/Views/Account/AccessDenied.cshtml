@@ -39,13 +39,13 @@
         }
         else if (User.IsInRole("Cajero"))
         {
-            <a asp-controller="Cajero" asp-action="Index" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
+            <a asp-controller="Cashier" asp-action="Index" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
                 Volver al Inicio (Cajero)
             </a>
         }
         else if (User.IsInRole("Cliente"))
         {
-            <a asp-controller="Cliente" asp-action="Index" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
+            <a asp-controller="Client" asp-action="Index" class="btn-primary-neon d-inline-block text-decoration-none" style="box-sizing: border-box;">
                 Volver al Inicio (Cliente)
             </a>
         }

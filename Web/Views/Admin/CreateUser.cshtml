@@ -1,0 +1,169 @@
+@model Application.Models.ViewModels.Admin.CreateUserViewModel
+@{
+    ViewData["Title"] = "Crear Usuario";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .form-container {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 40px;
+        margin-top: 30px;
+        max-width: 900px;
+    }
+    .custom-label {
+        color: white;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+        display: block;
+    }
+    .custom-label span { color: #FF6B6B; } 
+    
+    .custom-input {
+        background-color: #080D17;
+        border: 1px solid var(--border-color);
+        color: white;
+        padding: 12px 16px;
+        border-radius: 8px;
+        width: 100%;
+        outline: none;
+        transition: border-color 0.3s ease;
+    }
+    .custom-input:focus {
+        border-color: var(--cyan-accent);
+    }
+    .custom-input::placeholder {
+        color: #4A5568;
+    }
+    
+    .btn-cancel {
+        background-color: transparent;
+        color: white;
+        border: 1px solid var(--border-color);
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .btn-save {
+        background-color: var(--cyan-accent);
+        color: #000;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+</style>
+
+<div>
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h2 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 8px;">Crear Usuario</h2>
+            <p style="color: var(--text-muted); font-size: 1rem;">Registra un nuevo usuario en el sistema bancario.</p>
+        </div>
+        <a asp-action="UserManagement" style="color: var(--text-muted);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></a>
+    </div>
+
+    <div class="form-container">
+        <form asp-action="CreateUser" method="post">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="FirstName">Nombre <span>*</span></label>
+                    <input asp-for="FirstName" class="custom-input" placeholder="Ej. Juan" />
+                    <span asp-validation-for="FirstName" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="LastName">Apellido <span>*</span></label>
+                    <input asp-for="LastName" class="custom-input" placeholder="Ej. Pérez" />
+                    <span asp-validation-for="LastName" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="Identification">Cédula <span>*</span></label>
+                    <input asp-for="Identification" class="custom-input" placeholder="000-0000000-0" />
+                    <span asp-validation-for="Identification" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="Email">Correo electrónico <span>*</span></label>
+                    <input asp-for="Email" class="custom-input" placeholder="correo@ejemplo.com" />
+                    <span asp-validation-for="Email" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="Username">Nombre de usuario <span>*</span></label>
+                    <div style="position: relative;">
+                        <svg style="position: absolute; left: 15px; top: 12px; color: #4A5568;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <input asp-for="Username" class="custom-input" style="padding-left: 45px;" placeholder="usuario_123" />
+                    </div>
+                    <span asp-validation-for="Username" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="Role">Tipo de usuario <span>*</span></label>
+                    <select asp-for="Role" class="custom-input" id="roleSelect">
+                        <option value="">Seleccionar rol</option>
+                        <option value="Administrador">Administrador</option>
+                        <option value="Cajero">Cajero</option>
+                        <option value="Cliente">Cliente</option>
+                    </select>
+                    <span asp-validation-for="Role" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="Password">Contraseña <span>*</span></label>
+                    <div style="position: relative;">
+                        <svg style="position: absolute; left: 15px; top: 12px; color: #4A5568;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        <input asp-for="Password" class="custom-input" style="padding-left: 45px;" placeholder="........" />
+                    </div>
+                    <span asp-validation-for="Password" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+                <div class="col-md-6">
+                    <label class="custom-label" asp-for="ConfirmPassword">Confirmar contraseña <span>*</span></label>
+                    <div style="position: relative;">
+                        <svg style="position: absolute; left: 15px; top: 12px; color: #4A5568;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <input asp-for="ConfirmPassword" class="custom-input" style="padding-left: 45px;" placeholder="........" />
+                    </div>
+                    <span asp-validation-for="ConfirmPassword" class="text-danger" style="font-size: 0.8rem;"></span>
+                </div>
+
+                <div class="col-md-6" id="initialAmountDiv" style="display: none;">
+                    <label class="custom-label" asp-for="InitialAmount">Monto inicial (RD$)</label>
+                    <input asp-for="InitialAmount" type="number" step="0.01" class="custom-input" placeholder="0.00" />
+                    <span asp-validation-for="InitialAmount" class="text-danger" style="font-size: 0.8rem;"></span>
+                    <small style="color: var(--text-muted); font-size: 0.75rem;">Aplica a la cuenta de ahorro principal.</small>
+                </div>
+
+            </div>
+
+            <div class="d-flex justify-content-end gap-3 mt-5">
+                <a asp-action="UserManagement" class="btn-cancel">Cancelar</a>
+                <button type="submit" class="btn-save">Guardar Usuario</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const roleSelect = document.getElementById("roleSelect");
+            const initialAmountDiv = document.getElementById("initialAmountDiv");
+
+            function toggleAmountField() {
+                if (roleSelect.value === "Cliente") {
+                    initialAmountDiv.style.display = "block";
+                } else {
+                    initialAmountDiv.style.display = "none";
+                    document.getElementById("InitialAmount").value = ""; 
+                }
+            }
+
+            roleSelect.addEventListener("change", toggleAmountField);
+            toggleAmountField(); 
+        });
+    </script>
+}

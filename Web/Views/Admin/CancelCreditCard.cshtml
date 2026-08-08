@@ -1,0 +1,29 @@
+@model Application.Models.ViewModels.Admin.CancelCreditCardViewModel
+@{
+    ViewData["Title"] = "Cancelar Tarjeta";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div style="display: flex; align-items: center; justify-content: center; height: 100%; background-color: var(--bg-main);">
+    <div style="background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 40px; text-align: center; max-width: 500px;">
+        <div style="width: 70px; height: 70px; background-color: rgba(255, 107, 107, 0.1); border: 2px solid #FF6B6B; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #FF6B6B;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+        </div>
+        
+        <h2 style="color: white; font-weight: 700; margin-bottom: 15px;">Cancelar Tarjeta</h2>
+        <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 10px;">¿Está seguro que desea cancelar la tarjeta <strong>@Model.MaskedNumber</strong>?</p>
+        
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <div class="alert alert-danger" style="background-color: rgba(255, 107, 107, 0.1); border: 1px solid #FF6B6B; color: #FF6B6B; border-radius: 8px; font-size: 0.9rem; margin-top: 20px;">
+                @TempData["ErrorMessage"]
+            </div>
+        }
+
+        <form asp-action="CancelCreditCardConfirmed" method="post" class="d-flex justify-content-center gap-3 mt-4">
+            <input type="hidden" asp-for="Id" />
+            <a asp-action="CreditCardManagement" style="background-color: transparent; color: white; border: 1px solid var(--border-color); padding: 10px 24px; border-radius: 8px; font-weight: 600; text-decoration: none;">Cancelar</a>
+            <button type="submit" style="background-color: #FF6B6B; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer;">Aceptar</button>
+        </form>
+    </div>
+</div>

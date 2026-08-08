@@ -23,10 +23,10 @@ public class AccountController : Controller
             return RedirectToAction("Index", "Admin");
             
           if (User.IsInRole("Cajero"))
-            return RedirectToAction("Index", "Cajero");
+            return RedirectToAction("Index", "Cashier");
             
           if (User.IsInRole("Cliente"))
-            return RedirectToAction("Index", "Cliente");
+            return RedirectToAction("Index", "Client");
 
           return RedirectToAction("Index", "Home");
        }

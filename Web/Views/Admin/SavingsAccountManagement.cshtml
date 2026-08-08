@@ -1,0 +1,120 @@
+@model Application.Models.ViewModels.Admin.SavingsAccountListViewModel
+@{
+    ViewData["Title"] = "Gestión de Cuentas de Ahorro";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .module-container { background-color: var(--bg-main); min-height: 100%; }
+    .table-container { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; }
+    
+    .filter-bar { background-color: transparent; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .search-input { background-color: #080D17; border: 1px solid var(--border-color); color: white; padding: 10px 15px 10px 40px; border-radius: 8px; outline: none; width: 350px; }
+    .custom-select { background-color: #0B101E; color: white; border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 6px; outline: none; }
+    
+    .custom-table { width: 100%; color: white; border-collapse: separate; border-spacing: 0 15px; }
+    .custom-table th { color: var(--text-muted); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; padding: 0 15px 10px 15px; border-bottom: 1px solid var(--border-color); }
+    .custom-table td { padding: 15px; background-color: #0B101E; font-size: 0.9rem; vertical-align: middle; }
+    .custom-table tr td:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+    .custom-table tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+    
+    .btn-create { background-color: var(--cyan-accent); color: #000; font-weight: 600; padding: 10px 24px; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+    
+    .badge-status { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid; display: inline-block;}
+    .badge-activa { border-color: rgba(0, 229, 255, 0.4); color: var(--cyan-accent); background-color: rgba(0, 229, 255, 0.05); }
+    .badge-cancelada { border-color: transparent; color: #FF6B6B; background-color: rgba(255, 107, 107, 0.1); }
+</style>
+
+<div class="module-container">
+    @if (TempData["SuccessMessage"] != null) { <div class="alert alert-success" style="background-color: rgba(0, 229, 255, 0.1); border: 1px solid var(--cyan-accent); color: var(--cyan-accent); border-radius: 8px; padding: 15px; margin-bottom: 24px;">@TempData["SuccessMessage"]</div> }
+    @if (TempData["ErrorMessage"] != null) { <div class="alert alert-danger" style="background-color: rgba(255, 107, 107, 0.1); border: 1px solid #FF6B6B; color: #FF6B6B; border-radius: 8px; padding: 15px; margin-bottom: 24px;">@TempData["ErrorMessage"]</div> }
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 8px;">Gestión de Cuentas de Ahorro</h2>
+            <p style="color: var(--text-muted); font-size: 1rem;">Administra y asigna cuentas secundarias a clientes</p>
+        </div>
+        <a asp-action="AssignSavingsAccountStep1" class="btn-create">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Asignar cuenta de ahorro
+        </a>
+    </div>
+
+    <div class="table-container">
+        <div class="filter-bar">
+            <form asp-action="SavingsAccountManagement" method="get" id="filterForm" class="d-flex w-100 justify-content-between align-items-center">
+                <div style="position: relative;">
+                    <svg style="position: absolute; left: 12px; top: 12px; color: var(--text-muted);" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" name="searchCedula" class="search-input" placeholder="Buscar por cédula..." value="@Model.SearchCedula" onblur="document.getElementById('filterForm').submit();" />
+                </div>
+                <div class="d-flex gap-3">
+                    <select class="custom-select" name="typeFilter" onchange="document.getElementById('filterForm').submit();">
+                        <option value="Todas" selected="@(Model.CurrentTypeFilter == "Todas")">Todas las cuentas</option>
+                        <option value="Principal" selected="@(Model.CurrentTypeFilter == "Principal")">Principales</option>
+                        <option value="Secundaria" selected="@(Model.CurrentTypeFilter == "Secundaria")">Secundarias</option>
+                    </select>
+                    <select class="custom-select" name="statusFilter" onchange="document.getElementById('filterForm').submit();">
+                        <option value="Todas" selected="@(Model.CurrentStatusFilter == "Todas")">Todos los estados</option>
+                        <option value="Activas" selected="@(Model.CurrentStatusFilter == "Activas")">Activas</option>
+                        <option value="Canceladas" selected="@(Model.CurrentStatusFilter == "Canceladas")">Canceladas</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+
+        @if (ViewBag.SearchMessage != null) { <div class="alert alert-warning" style="background-color: rgba(255, 171, 0, 0.1); border: 1px solid #FFAB00; color: #FFAB00; border-radius: 8px;">@ViewBag.SearchMessage</div> }
+
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>N° de Cuenta</th>
+                    <th>Cliente</th>
+                    <th>Balance</th>
+                    <th>Tipo de Cuenta</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var account in Model.Accounts)
+                {
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-accent)" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                                <span style="font-family: monospace; font-size: 1rem; color: white; font-weight: 600;">@account.AccountNumber</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div style="font-weight: 600; color: white;">@account.ClientName</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">@account.ClientCedula</div>
+                        </td>
+                        <td style="color: white; font-weight: 600;">@account.Balance.ToString("C")</td>
+                        <td>
+                            <span style="color: var(--text-muted); font-size: 0.85rem;">@account.AccountType</span>
+                        </td>
+                        <td>
+                            <span class="badge-status @(account.Status == "Activa" ? "badge-activa" : "badge-cancelada")">
+                                <span style="height: 6px; width: 6px; border-radius: 50%; display: inline-block; background-color: @(account.Status == "Activa" ? "var(--cyan-accent)" : "#FF6B6B"); margin-right: 4px;"></span>
+                                @account.Status
+                            </span>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center gap-3">
+                                <a asp-action="SavingsAccountDetails" asp-route-id="@account.Id" style="color: var(--text-muted);" title="Ver detalles">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                </a>
+                                @if (account.Status == "Activa" && account.AccountType == "Secundaria")
+                                {
+                                    <a asp-action="CancelSavingsAccount" asp-route-id="@account.Id" style="color: #FF6B6B;" title="Cancelar Cuenta">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                    </a>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
