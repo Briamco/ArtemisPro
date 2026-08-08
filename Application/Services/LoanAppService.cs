@@ -64,6 +64,14 @@ public class LoanAppService : ILoanAppService
         if (client == null)
             return new LoanCreationResult { Success = false, ErrorMessage = "Cliente no encontrado." };
 
+        var activeLoan = await _unitOfWork.Loans.GetActiveByClientIdAsync(dto.ClientId);
+        if (activeLoan != null)
+            return new LoanCreationResult { Success = false, ErrorMessage = "El cliente ya tiene un préstamo activo." };
+
+        var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
+        if (primaryAccount == null)
+            return new LoanCreationResult { Success = false, ErrorMessage = "El cliente no tiene una cuenta de ahorro principal activa." };
+
         // 1. Calculate Average Debt of the System
         var (averageDebt, hasClients) = await GetAverageDebtAsync();
 
@@ -160,25 +168,21 @@ public class LoanAppService : ILoanAppService
         await GenerateInstallmentsAsync(loan, monthlyInterestRate, baseMonthlyPayment);
         
         // Credit approved amount to primary savings account
-        var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
-        if (primaryAccount != null)
-        {
-            primaryAccount.Balance += dto.ApprovedAmount;
-            _unitOfWork.SavingsAccounts.Update(primaryAccount);
+        primaryAccount.Balance += dto.ApprovedAmount;
+        _unitOfWork.SavingsAccounts.Update(primaryAccount);
 
-            var transaction = new Transaction
-            {
-                SavingsAccountId = primaryAccount.Id,
-                Amount = dto.ApprovedAmount,
-                Type = TransactionType.Credito,
-                Status = TransactionStatus.Aprobada,
-                Date = DateTime.UtcNow,
-                Origin = "Desembolso de Préstamo",
-                Beneficiary = $"{client.FirstName} {client.LastName}"
-            };
-            
-            await _unitOfWork.Transactions.AddAsync(transaction);
-        }
+        var transaction = new Transaction
+        {
+            SavingsAccountId = primaryAccount.Id,
+            Amount = dto.ApprovedAmount,
+            Type = TransactionType.Credito,
+            Status = TransactionStatus.Aprobada,
+            Date = DateTime.UtcNow,
+            Origin = "Desembolso de Préstamo",
+            Beneficiary = $"{client.FirstName} {client.LastName}"
+        };
+        
+        await _unitOfWork.Transactions.AddAsync(transaction);
 
         await _unitOfWork.SaveChangesAsync();
 
