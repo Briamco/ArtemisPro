@@ -1,5 +1,5 @@
 using System;
-using System.ComponentModel.DataAnnotations;
+using Application.DTOs.Banking;
 
 namespace Application.DTOs.Banking;
 

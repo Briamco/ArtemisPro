@@ -119,6 +119,7 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddHostedService<Api.BackgroundServices.OverdueLoanInstallmentService>();
 var app = builder.Build();
 
 // Startup seeding
@@ -164,3 +165,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+
