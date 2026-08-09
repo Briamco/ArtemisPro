@@ -1,4 +1,5 @@
 using System;
+using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,11 +28,12 @@ public class LoanAppService : ILoanAppService
 
     public async Task<IEnumerable<LoanDto>> GetLoansAsync(string? status = null, string? cedula = null)
     {
-        var loans = await _unitOfWork.Loans.GetAllAsync();
-        
+        var loansQuery = _unitOfWork.Loans.GetAllAsync().AsQueryable();
+        loansQuery = loansQuery.Include(l => l.Client).Include(l => l.Installments);
+
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<LoanStatus>(status, out var loanStatus))
         {
-            loans = loans.Where(l => l.Status == loanStatus);
+            loansQuery = loansQuery.Where(l => l.Status == loanStatus);
         }
 
         if (!string.IsNullOrEmpty(cedula))
@@ -41,9 +43,10 @@ public class LoanAppService : ILoanAppService
             {
                 return Enumerable.Empty<LoanDto>();
             }
-            loans = loans.Where(l => l.ClientId == user.Id);
+            loansQuery = loansQuery.Where(l => l.ClientId == user.Id);
         }
 
+        var loans = await loansQuery.ToListAsync();
         return _mapper.Map<IEnumerable<LoanDto>>(loans);
     }
 
@@ -205,8 +208,8 @@ public class LoanAppService : ILoanAppService
         }
 
         // Send email notification
-        var subject = "Aprobación de Préstamo";
-        var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Su préstamo número {loan.LoanNumber} por un monto de {dto.ApprovedAmount:C} ha sido aprobado y acreditado a su cuenta principal.<br><br>Gracias por confiar en nosotros.";
+        var subject = "Préstamo aprobado";
+        var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Su préstamo número {loan.LoanNumber} por un monto de {dto.ApprovedAmount:C} ha sido aprobado y acreditado a su cuenta principal.<br>Plazo: {dto.Term} meses<br>Tasa de interés anual: {dto.AnnualInterestRate}%<br>Cuota mensual: {baseMonthlyPayment:C}<br><br>Gracias por confiar en nosotros.";
         try
         {
             if (!string.IsNullOrEmpty(client.Email))

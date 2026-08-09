@@ -1,5 +1,5 @@
 using System;
-using System.ComponentModel.DataAnnotations;
+using Application.DTOs.Banking;
 
 namespace Application.DTOs.Banking;
 
@@ -9,6 +9,7 @@ public class CreateLoanDto
     public Guid ClientId { get; set; }
 
     [Required(ErrorMessage = "El plazo del préstamo es requerido.")]
+    [AllowedTerms]
     public int Term { get; set; }
 
     [Required(ErrorMessage = "El monto a prestar es requerido.")]

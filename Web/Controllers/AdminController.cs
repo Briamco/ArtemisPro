@@ -3,8 +3,12 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Application.Models.ViewModels.Admin;
 using Application.Interfaces.Services;
+<<<<<<< HEAD
+using System.Linq;
+=======
 using Application.DTOs.Banking;
 using Domain.Entities;
+>>>>>>> origin/master
 
 namespace Web.Controllers;
 
@@ -12,9 +16,19 @@ namespace Web.Controllers;
 public class AdminController : Controller
 {
     private readonly ILoanAppService _loanAppService;
+<<<<<<< HEAD
+
+    public AdminController(ILoanAppService loanAppService)
+    {
+        _loanAppService = loanAppService;
+    }
+
+    public IActionResult Index()
+=======
     private readonly UserManager<ApplicationUser> _userManager;
 
     public AdminController(ILoanAppService loanAppService, UserManager<ApplicationUser> userManager)
+>>>>>>> origin/master
     {
         _loanAppService = loanAppService;
         _userManager = userManager;
@@ -221,38 +235,58 @@ public class AdminController : Controller
     {
         return ToggleUserStatus(id);
     }
-[HttpGet]
+
+    [HttpGet]
     public async Task<IActionResult> LoanManagement(string statusFilter = "Activos", string searchCedula = "", int page = 1)
     {
         var domainStatus = statusFilter == "Activos" ? "Activo" : statusFilter == "Completados" ? "Completado" : null;
         var loansDto = await _loanAppService.GetLoansAsync(domainStatus, searchCedula);
-        
-        var pageSize = 20;
+
+        const int pageSize = 20;
         var totalRecords = loansDto.Count;
         var totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
         var pagedLoans = loansDto.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
-        var loans = new List<LoanViewModel>();
+        var loanList = new List<LoanViewModel>();
         foreach (var l in pagedLoans)
         {
             var user = await _userManager.FindByIdAsync(l.ClientId.ToString());
-            loans.Add(new LoanViewModel
+            loanList.Add(new LoanViewModel
             {
                 Id = l.Id.ToString(),
                 LoanNumber = l.LoanNumber,
                 ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "Desconocido",
                 ClientCedula = user?.Cedula ?? "N/A",
                 ApprovedCapital = l.ApprovedAmount,
+                TotalInstallments = l.TotalInstallments,
+                PaidInstallments = l.PaidInstallments,
+                PendingAmount = l.PendingAmount,
                 InterestRate = l.AnnualInterestRate,
                 TermInMonths = l.Term,
-                LoanStatus = l.Status,
-                PendingAmount = l.PendingAmount
+                LoanStatus = l.Status.ToString(),
+                ClientStatus = l.ClientStatus
             });
         }
 
+        var query = loanList.AsQueryable();
+
+        if (!string.IsNullOrEmpty(searchCedula))
+        {
+            query = query.Where(l => l.ClientCedula.Contains(searchCedula));
+            if (!query.Any())
+            {
+                ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene préstamos registrados.";
+            }
+        }
+
+        query = query.OrderBy(l => l.LoanStatus == "Completado" ? 1 : 0)
+                     .ThenByDescending(l => l.Id);
+
+        var filteredLoans = query.ToList();
+
         var model = new LoanListViewModel
         {
-            Loans = loans,
+            Loans = filteredLoans,
             CurrentFilter = statusFilter,
             SearchCedula = searchCedula,
             CurrentPage = page,
