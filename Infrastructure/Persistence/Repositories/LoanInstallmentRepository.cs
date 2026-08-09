@@ -28,4 +28,26 @@ public class LoanInstallmentRepository : BaseRepository<LoanInstallment>, ILoanI
             .Where(li => li.IsOverdue && li.PaymentStatus != Domain.Enums.PaymentStatus.Pagada)
             .ToListAsync();
     }
+
+    public async Task<decimal> GetTotalPendingDebtByClientIdAsync(Guid clientId)
+    {
+        var activeLoanIds = _context.Loans
+            .Where(l => l.ClientId == clientId && l.Status == Domain.Enums.LoanStatus.Activo)
+            .Select(l => l.Id);
+            
+        return await _context.LoanInstallments
+            .Where(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus != Domain.Enums.PaymentStatus.Pagada)
+            .SumAsync(i => (decimal?)i.PendingBalance) ?? 0;
+    }
+
+    public async Task<decimal> GetTotalSystemPendingDebtAsync()
+    {
+        var activeLoanIds = _context.Loans
+            .Where(l => l.Status == Domain.Enums.LoanStatus.Activo)
+            .Select(l => l.Id);
+            
+        return await _context.LoanInstallments
+            .Where(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus != Domain.Enums.PaymentStatus.Pagada)
+            .SumAsync(i => (decimal?)i.PendingBalance) ?? 0;
+    }
 }
