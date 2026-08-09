@@ -12,10 +12,14 @@ namespace Api.BackgroundServices
     public class OverdueLoanInstallmentService : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
+        private readonly Microsoft.Extensions.Logging.ILogger<OverdueLoanInstallmentService> _logger;
 
-        public OverdueLoanInstallmentService(IServiceProvider serviceProvider)
+        public OverdueLoanInstallmentService(
+            IServiceProvider serviceProvider,
+            Microsoft.Extensions.Logging.ILogger<OverdueLoanInstallmentService> logger)
         {
             _serviceProvider = serviceProvider;
+            _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -42,7 +46,7 @@ namespace Api.BackgroundServices
                 }
                 catch (Exception ex)
                 {
-                    // Log exception
+                    _logger.LogError(ex, "Error updating overdue installments");
                 }
 
                 // Wait 24 hours or appropriate time before running again

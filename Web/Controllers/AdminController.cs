@@ -24,14 +24,15 @@ public class AdminController : Controller
     {
         var loans = await _loanAppService.GetLoansAsync();
         
-        int activeClients = _dummyUsers.Count(u => u.Role == "Cliente" && u.IsActive);
-        int inactiveClients = _dummyUsers.Count(u => u.Role == "Cliente" && !u.IsActive);
+        var allClients = await _userManager.GetUsersInRoleAsync("Cliente");
+        int activeClients = allClients.Count(u => u.IsActive);
+        int inactiveClients = allClients.Count(u => !u.IsActive);
         int activeLoans = loans.Count(l => l.Status == "Activo");
         int activeCards = _dummyCards.Count(c => c.Status == "Activa");
         int activeSavings = _dummySavings.Count(s => s.Status == "Activa");
         int totalProducts = activeLoans + activeCards + activeSavings;
 
-        decimal totalLoanDebt = loans.Where(l => l.Status == "Activo").Sum(l => l.ApprovedAmount);
+        decimal totalLoanDebt = loans.Where(l => l.Status == "Activo").Sum(l => l.PendingAmount);
         decimal totalCardDebt = _dummyCards.Where(c => c.Status == "Activa").Sum(c => c.DebtAmount);
         int totalClientsForAvg = activeClients > 0 ? activeClients : 1;
         decimal avgDebt = Math.Round((totalLoanDebt + totalCardDebt) / totalClientsForAvg, 2);
@@ -241,7 +242,7 @@ public class AdminController : Controller
             InterestRate = l.AnnualInterestRate,
             TermInMonths = l.Term,
             LoanStatus = l.Status,
-            PendingAmount = l.ApprovedAmount // Simple mock since the real one requires installments calculation
+            PendingAmount = l.PendingAmount
         }).ToList();
 
         var model = new LoanListViewModel
@@ -349,7 +350,12 @@ public class AdminController : Controller
 
         // Get the current admin's ID
         var adminUser = await _userManager.GetUserAsync(User);
-        var adminId = adminUser?.Id ?? Guid.Empty;
+        if (adminUser == null)
+        {
+            TempData["ErrorMessage"] = "No se pudo identificar el administrador actual.";
+            return RedirectToAction(nameof(AssignLoanStep1));
+        }
+        var adminId = adminUser.Id;
 
         var dto = new CreateLoanDto
         {
@@ -403,7 +409,12 @@ public class AdminController : Controller
         }
 
         var adminUser = await _userManager.GetUserAsync(User);
-        var adminId = adminUser?.Id ?? Guid.Empty;
+        if (adminUser == null)
+        {
+            TempData["ErrorMessage"] = "No se pudo identificar el administrador actual.";
+            return RedirectToAction(nameof(LoanManagement));
+        }
+        var adminId = adminUser.Id;
 
         var dto = new CreateLoanDto
         {
@@ -447,7 +458,7 @@ public class AdminController : Controller
             InterestRate = loan.AnnualInterestRate,
             TermInMonths = loan.Term,
             LoanStatus = loan.Status,
-            PendingBalance = loan.ApprovedAmount,
+            PendingBalance = loan.PendingAmount,
             MonthlyQuote = loan.ApprovedAmount / loan.Term,
             StartDate = loan.CreatedAt,
             NextDueDate = DateTime.Now.AddMonths(1),
@@ -499,8 +510,14 @@ public class AdminController : Controller
         if (!ModelState.IsValid)
             return View(model);
             
+        if (!Guid.TryParse(model.Id, out var loanId))
+        {
+            TempData["ErrorMessage"] = "ID de préstamo inválido.";
+            return RedirectToAction(nameof(LoanManagement));
+        }
+
         var dto = new UpdateLoanRateDto { AnnualInterestRate = model.InterestRate };
-        var (success, error) = await _loanAppService.UpdateLoanRateAsync(Guid.Parse(model.Id), dto);
+        var (success, error) = await _loanAppService.UpdateLoanRateAsync(loanId, dto);
         
         if (!success)
         {

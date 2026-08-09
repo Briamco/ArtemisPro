@@ -37,10 +37,11 @@ public class LoanAppService : ILoanAppService
         if (!string.IsNullOrEmpty(cedula))
         {
             var user = (await _unitOfWork.Users.FindAsync(u => u.Cedula == cedula)).FirstOrDefault();
-            if (user != null)
+            if (user == null)
             {
-                loans = loans.Where(l => l.ClientId == user.Id);
+                return Enumerable.Empty<LoanDto>();
             }
+            loans = loans.Where(l => l.ClientId == user.Id);
         }
 
         return _mapper.Map<IEnumerable<LoanDto>>(loans);
@@ -155,43 +156,52 @@ public class LoanAppService : ILoanAppService
         }
 
         // Proceed to create loan
-        var loanNumber = await GenerateUniqueLoanNumberAsync();
-        var loan = new Loan
+        await _unitOfWork.BeginTransactionAsync();
+        try
         {
-            ClientId = dto.ClientId,
-            LoanNumber = loanNumber,
-            ApprovedAmount = dto.ApprovedAmount,
-            Term = dto.Term,
-            AnnualInterestRate = dto.AnnualInterestRate,
-            Status = LoanStatus.Activo,
-            CreatedAt = DateTime.UtcNow,
-            AdminId = dto.AdminId
-        };
+            var loanNumber = await GenerateUniqueLoanNumberAsync();
+            var loan = new Loan
+            {
+                ClientId = dto.ClientId,
+                LoanNumber = loanNumber,
+                ApprovedAmount = dto.ApprovedAmount,
+                Term = dto.Term,
+                AnnualInterestRate = dto.AnnualInterestRate,
+                Status = LoanStatus.Activo,
+                CreatedAt = DateTime.UtcNow,
+                AdminId = dto.AdminId
+            };
 
-        await _unitOfWork.Loans.AddAsync(loan);
-        await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.Loans.AddAsync(loan);
 
-        // Generate Installments
-        await GenerateInstallmentsAsync(loan, monthlyInterestRate, baseMonthlyPayment);
-        
-        // Credit approved amount to primary savings account
-        primaryAccount.Balance += dto.ApprovedAmount;
-        _unitOfWork.SavingsAccounts.Update(primaryAccount);
+            // Generate Installments
+            await GenerateInstallmentsAsync(loan, monthlyInterestRate, baseMonthlyPayment);
+            
+            // Credit approved amount to primary savings account
+            primaryAccount.Balance += dto.ApprovedAmount;
+            _unitOfWork.SavingsAccounts.Update(primaryAccount);
 
-        var transaction = new Transaction
+            var transaction = new Transaction
+            {
+                SavingsAccountId = primaryAccount.Id,
+                Amount = dto.ApprovedAmount,
+                Type = TransactionType.Credito,
+                Status = TransactionStatus.Aprobada,
+                Date = DateTime.UtcNow,
+                Origin = "Desembolso de Préstamo",
+                Beneficiary = $"{client.FirstName} {client.LastName}"
+            };
+            
+            await _unitOfWork.Transactions.AddAsync(transaction);
+
+            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.CommitTransactionAsync();
+        }
+        catch
         {
-            SavingsAccountId = primaryAccount.Id,
-            Amount = dto.ApprovedAmount,
-            Type = TransactionType.Credito,
-            Status = TransactionStatus.Aprobada,
-            Date = DateTime.UtcNow,
-            Origin = "Desembolso de Préstamo",
-            Beneficiary = $"{client.FirstName} {client.LastName}"
-        };
-        
-        await _unitOfWork.Transactions.AddAsync(transaction);
-
-        await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.RollbackTransactionAsync();
+            throw;
+        }
 
         // Send email notification
         var subject = "Aprobación de Préstamo";
@@ -216,6 +226,7 @@ public class LoanAppService : ILoanAppService
     {
         var loan = await _unitOfWork.Loans.GetByIdAsync(id);
         if (loan == null) return (false, "Préstamo no encontrado.");
+        if (loan.Status != LoanStatus.Activo) return (false, "Solo se puede modificar la tasa de interés de préstamos activos.");
 
         loan.AnnualInterestRate = dto.AnnualInterestRate;
         _unitOfWork.Loans.Update(loan);
