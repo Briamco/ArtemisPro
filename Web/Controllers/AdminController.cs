@@ -7,6 +7,14 @@ namespace Web.Controllers;
 //[Authorize(Roles = "Administrador")]
 public class AdminController : Controller
 {
+    private readonly Application.Interfaces.Services.ICreditCardAppService _creditCardService;
+    private readonly Application.Interfaces.Services.IUserAppService _userService;
+
+    public AdminController(Application.Interfaces.Services.ICreditCardAppService creditCardService, Application.Interfaces.Services.IUserAppService userService)
+    {
+        _creditCardService = creditCardService;
+        _userService = userService;
+    }
     public IActionResult Index()
     {
         int activeClients = _dummyUsers.Count(u => u.Role == "Cliente" && u.IsActive);
@@ -456,64 +464,66 @@ public class AdminController : Controller
     };
 
     [HttpGet]
-    public IActionResult CreditCardManagement(string statusFilter = "Activas", string searchCedula = "", int page = 1)
+    public async Task<IActionResult> CreditCardManagement(string statusFilter = "Activas", string searchCedula = "", int page = 1)
     {
-        var query = _dummyCards.AsQueryable();
-
-        if (statusFilter == "Activas") query = query.Where(c => c.Status == "Activa");
-        else if (statusFilter == "Canceladas") query = query.Where(c => c.Status == "Cancelada");
-
-        if (!string.IsNullOrEmpty(searchCedula))
-        {
-            query = query.Where(c => c.ClientCedula.Contains(searchCedula));
-            if (!query.Any()) ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene tarjetas registradas.";
-        }
-
-        query = query.OrderBy(c => c.Status == "Cancelada" ? 1 : 0).ThenByDescending(c => c.Id);
-
-        var cards = query.ToList();
+        var allCards = await _creditCardService.GetCreditCardsAsync(statusFilter == "Activas" ? "Activa" : (statusFilter == "Canceladas" ? "Cancelada" : null), searchCedula);
+        
+        int pageSize = 20;
+        var paginatedCards = allCards.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        
+        var totalActive = allCards.Count(c => c.Status == "Activa");
+        var totalDebt = allCards.Sum(c => c.Debt);
+        
         var model = new CreditCardListViewModel
         {
-            Cards = cards,
+            Cards = paginatedCards.Select(c => new CreditCardViewModel 
+            {
+                Id = c.Id.ToString(),
+                MaskedNumber = c.MaskedCardNumber,
+                ClientName = c.ClientName,
+                ClientCedula = "", 
+                CreditLimit = c.Limit,
+                ExpirationDate = c.ExpirationDate,
+                DebtAmount = c.Debt,
+                Status = c.Status
+            }).ToList(),
             CurrentFilter = statusFilter,
             SearchCedula = searchCedula,
-            TotalActiveCards = _dummyCards.Count(c => c.Status == "Activa"),
-            TotalAccumulatedDebt = _dummyCards.Sum(c => c.DebtAmount),
+            TotalActiveCards = totalActive,
+            TotalAccumulatedDebt = totalDebt,
             PortfolioRisk = "Bajo",
-            CurrentPage = page, TotalPages = 1, TotalRecords = cards.Count
+            CurrentPage = page, 
+            TotalPages = Math.Max(1, (int)Math.Ceiling(allCards.Count() / (double)pageSize)), 
+            TotalRecords = allCards.Count()
         };
 
         return View(model);
     }
 
-   [HttpGet]
-    public IActionResult AssignCardStep1(string searchCedula = "")
+    [HttpGet]
+    public async Task<IActionResult> AssignCardStep1(string searchCedula = "")
     {
-        var allClients = new List<ClientSelectionViewModel>
-        {
-            new ClientSelectionViewModel { Id = "c1", Cedula = "402-1234567-8", FullName = "Carlos E. Mendoza", Email = "cmendoza@example.com", TotalDebt = 8450.00m },
-            new ClientSelectionViewModel { Id = "c2", Cedula = "001-9876543-2", FullName = "Laura V. Castillo", Email = "lcastillo@example.com", TotalDebt = 0.00m },
-            new ClientSelectionViewModel { Id = "c3", Cedula = "223-4567890-1", FullName = "Roberto Sánchez", Email = "rsanchez_corp@example.com", TotalDebt = 1200.50m },
-            new ClientSelectionViewModel { Id = "c4", Cedula = "031-1122334-4", FullName = "Ana María Rojas", Email = "am_rojas@example.com", TotalDebt = 12300.00m }
-        };
-
-        var query = allClients.AsQueryable();
+        var users = await _userService.GetAllUsersAsync("Cliente");
+        var query = users.AsQueryable();
 
         if (!string.IsNullOrEmpty(searchCedula))
         {
             query = query.Where(c => c.Cedula.Contains(searchCedula));
-            
-            if (!query.Any())
-            {
-                ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula.";
-            }
+            if (!query.Any()) ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula.";
         }
 
         var model = new AssignCardStep1ViewModel
         {
             AverageSystemDebt = 4250.00m,
             SearchCedula = searchCedula,
-            EligibleClients = query.ToList()
+            EligibleClients = query.Select(u => new ClientSelectionViewModel
+            {
+                Id = u.Id.ToString(),
+                Cedula = u.Cedula,
+                FullName = $"{u.FirstName} {u.LastName}",
+                Email = u.Email,
+                TotalDebt = 0m
+            }).ToList()
         };
         
         return View(model);
@@ -532,122 +542,133 @@ public class AdminController : Controller
     }
 
     [HttpGet]
-    public IActionResult AssignCardStep2(string clientId)
+    public async Task<IActionResult> AssignCardStep2(string clientId)
     {
-        var model = new AssignCardStep2ViewModel { ClientId = clientId, ClientName = "Roberto Medina", ClientCedula = "001-1234567-8" };
+        if(!Guid.TryParse(clientId, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var user = await _userService.GetUserByIdAsync(gId);
+        if(user == null) return RedirectToAction(nameof(CreditCardManagement));
+
+        var model = new AssignCardStep2ViewModel { ClientId = clientId, ClientName = $"{user.FirstName} {user.LastName}", ClientCedula = user.Cedula };
         return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignCardStep2(AssignCardStep2ViewModel model)
+    public async Task<IActionResult> AssignCardStep2(AssignCardStep2ViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
         
-        var expDate = DateTime.Now.AddYears(3).ToString("MM/yy");
-        
-        TempData["SuccessMessage"] = $"Tarjeta de crédito asignada exitosamente. Vencimiento: {expDate}. (Correo enviado al cliente)";
-        return RedirectToAction(nameof(CreditCardManagement));
+        var dto = new Application.DTOs.Banking.AssignCreditCardDto
+        {
+            ClientId = Guid.Parse(model.ClientId),
+            Limit = model.CreditLimit
+        };
+
+        var result = await _creditCardService.AssignCreditCardAsync(dto);
+        if(result.Success)
+        {
+            TempData["SuccessMessage"] = $"Tarjeta de crédito asignada exitosamente.";
+            return RedirectToAction(nameof(CreditCardManagement));
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Error;
+            return View(model);
+        }
     }
 
     [HttpGet]
-    public IActionResult CreditCardDetails(string id)
+    public async Task<IActionResult> CreditCardDetails(string id)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == id);
+        if(!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var card = await _creditCardService.GetCreditCardByIdAsync(gId);
         if (card == null)
         {
             TempData["ErrorMessage"] = "La tarjeta seleccionada no existe.";
             return RedirectToAction(nameof(CreditCardManagement));
         }
 
+        var txs = await _creditCardService.GetTransactionsAsync(gId);
+
         var model = new CreditCardDetailsViewModel
         {
-            MaskedNumber = card.MaskedNumber,
+            MaskedNumber = card.MaskedCardNumber,
             ClientName = card.ClientName,
             ExpirationDate = card.ExpirationDate,
-            Consumptions = new List<ConsumptionViewModel>
+            Consumptions = txs.Select(t => new ConsumptionViewModel
             {
-                new ConsumptionViewModel { Date = DateTime.Now.AddDays(-2), Commerce = "Apple Store VIRTUAL", Amount = 1299.00m, Status = "APROBADO" },
-                new ConsumptionViewModel { Date = DateTime.Now.AddDays(-4), Commerce = "AVANCE EFECTIVO ATM", Amount = 300.00m, Status = "APROBADO" },
-                new ConsumptionViewModel { Date = DateTime.Now.AddDays(-5), Commerce = "Aerolíneas Argentinas", Amount = 850.50m, Status = "RECHAZADO" }
-            }
+                Date = t.Date,
+                Commerce = t.MerchantName,
+                Amount = t.Amount,
+                Status = t.Status
+            }).ToList()
         };
         return View(model);
     }
 
     [HttpGet]
-    public IActionResult EditCreditCardLimit(string id)
+    public async Task<IActionResult> EditCreditCardLimit(string id)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == id);
+        if(!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var card = await _creditCardService.GetCreditCardByIdAsync(gId);
         if (card == null) { TempData["ErrorMessage"] = "La tarjeta seleccionada no existe."; return RedirectToAction(nameof(CreditCardManagement)); }
         if (card.Status != "Activa") { TempData["ErrorMessage"] = "No se puede modificar una tarjeta cancelada."; return RedirectToAction(nameof(CreditCardManagement)); }
 
-        var model = new EditCreditCardLimitViewModel { Id = card.Id, MaskedNumber = card.MaskedNumber, CurrentDebt = card.DebtAmount, CurrentLimit = card.CreditLimit, NewLimit = card.CreditLimit };
+        var model = new EditCreditCardLimitViewModel { Id = card.Id.ToString(), MaskedNumber = card.MaskedCardNumber, CurrentDebt = card.Debt, CurrentLimit = card.Limit, NewLimit = card.Limit };
         return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult EditCreditCardLimit(EditCreditCardLimitViewModel model)
+    public async Task<IActionResult> EditCreditCardLimit(EditCreditCardLimitViewModel model)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == model.Id);
-        if (card == null)
+        if (!ModelState.IsValid) return View(model);
+        if(!Guid.TryParse(model.Id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+
+        var dto = new Application.DTOs.Banking.UpdateCreditCardLimitDto { NewLimit = model.NewLimit };
+        var result = await _creditCardService.UpdateCreditCardLimitAsync(gId, dto);
+
+        if (result.Success)
         {
-            TempData["ErrorMessage"] = "La tarjeta seleccionada no existe.";
+            TempData["SuccessMessage"] = "Límite actualizado correctamente.";
             return RedirectToAction(nameof(CreditCardManagement));
         }
-
-        if (card.Status != "Activa")
+        else
         {
-            TempData["ErrorMessage"] = "No se puede modificar una tarjeta cancelada.";
-            return RedirectToAction(nameof(CreditCardManagement));
-        }
-
-        if (model.NewLimit < card.DebtAmount)
-        {
-            ModelState.AddModelError("NewLimit", "El límite de la tarjeta no puede ser inferior al monto adeudado actualmente.");
+            TempData["ErrorMessage"] = result.Error;
             return View(model);
         }
-
-        if (!ModelState.IsValid) return View(model);
-
-        card.CreditLimit = model.NewLimit;
-        TempData["SuccessMessage"] = "Límite actualizado correctamente.";
-        return RedirectToAction(nameof(CreditCardManagement));
     }
 
     [HttpGet]
-    public IActionResult CancelCreditCard(string id)
+    public async Task<IActionResult> CancelCreditCard(string id)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == id);
+        if(!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var card = await _creditCardService.GetCreditCardByIdAsync(gId);
         if (card == null)
         {
             TempData["ErrorMessage"] = "La tarjeta seleccionada no existe.";
             return RedirectToAction(nameof(CreditCardManagement));
         }
         
-        return View(new CancelCreditCardViewModel { Id = card.Id, MaskedNumber = card.MaskedNumber.Length >= 4 ? card.MaskedNumber.Substring(card.MaskedNumber.Length - 4) : card.MaskedNumber, CurrentDebt = card.DebtAmount });
+        return View(new CancelCreditCardViewModel { Id = card.Id.ToString(), MaskedNumber = card.MaskedCardNumber, CurrentDebt = card.Debt });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult CancelCreditCardConfirmed(string id)
+    public async Task<IActionResult> CancelCreditCardConfirmed(string id)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == id);
-        if (card == null)
+        if(!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var result = await _creditCardService.CancelCreditCardAsync(gId);
+        
+        if(result.Success)
         {
-            TempData["ErrorMessage"] = "La tarjeta seleccionada no existe.";
-            return RedirectToAction(nameof(CreditCardManagement));
+            TempData["SuccessMessage"] = "Tarjeta cancelada exitosamente.";
         }
-
-        if (card.DebtAmount > 0)
+        else
         {
-            TempData["ErrorMessage"] = "Para cancelar esta tarjeta, el cliente debe saldar la totalidad de la deuda pendiente.";
-            return RedirectToAction(nameof(CancelCreditCard), new { id });
+            TempData["ErrorMessage"] = result.Error;
         }
-
-        card.Status = "Cancelada";
-        TempData["SuccessMessage"] = "Tarjeta cancelada exitosamente.";
         return RedirectToAction(nameof(CreditCardManagement));
     }
 
