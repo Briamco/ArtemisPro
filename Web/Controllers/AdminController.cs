@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Application.Models.ViewModels.Admin;
 using Application.Interfaces.Services;
 using Application.DTOs.Banking;
+using Domain.Entities;
 
 namespace Web.Controllers;
 
@@ -10,10 +12,12 @@ namespace Web.Controllers;
 public class AdminController : Controller
 {
     private readonly ILoanAppService _loanAppService;
+    private readonly UserManager<ApplicationUser> _userManager;
 
-    public AdminController(ILoanAppService loanAppService)
+    public AdminController(ILoanAppService loanAppService, UserManager<ApplicationUser> userManager)
     {
         _loanAppService = loanAppService;
+        _userManager = userManager;
     }
 
     public async Task<IActionResult> Index()
@@ -254,25 +258,37 @@ public class AdminController : Controller
     }
 
     [HttpGet]
-    public IActionResult AssignLoanStep1(string searchCedula = "")
+    public async Task<IActionResult> AssignLoanStep1(string searchCedula = "")
     {
-        var clients = new List<ClientSelectionViewModel>
-        {
-            new ClientSelectionViewModel { Id = "c1", Cedula = "402-1234567-8", FullName = "Juan Pérez Domínguez", Email = "juan.perez@email.com", TotalDebt = 0.00m },
-            new ClientSelectionViewModel { Id = "c2", Cedula = "001-9876543-2", FullName = "María Rodríguez Alba", Email = "m.rodriguez@empresa.com.do", TotalDebt = 15200.50m },
-            new ClientSelectionViewModel { Id = "c3", Cedula = "031-4567890-1", FullName = "Carlos Sánchez Mella", Email = "csanchez88@gmail.com", TotalDebt = 5000.00m }
-        };
+        var allClients = await _userManager.GetUsersInRoleAsync("Cliente");
+        var activeClients = allClients.Where(c => c.IsActive).ToList();
 
         if (!string.IsNullOrWhiteSpace(searchCedula))
         {
             var cleanSearch = searchCedula.Trim().Replace("-", "");
-            clients = clients.Where(c => c.Cedula.Contains(searchCedula.Trim(), StringComparison.OrdinalIgnoreCase) || 
-                                         c.Cedula.Replace("-", "").Contains(cleanSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+            activeClients = activeClients.Where(c => 
+                c.Cedula.Contains(searchCedula.Trim(), StringComparison.OrdinalIgnoreCase) || 
+                c.Cedula.Replace("-", "").Contains(cleanSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        var (averageDebt, _) = await _loanAppService.GetAverageDebtAsync();
+
+        var clients = new List<ClientSelectionViewModel>();
+        foreach (var c in activeClients)
+        {
+            clients.Add(new ClientSelectionViewModel
+            {
+                Id = c.Id.ToString(),
+                Cedula = c.Cedula,
+                FullName = $"{c.FirstName} {c.LastName}",
+                Email = c.Email ?? string.Empty,
+                TotalDebt = 0 // Will be evaluated during loan creation
+            });
         }
 
         var model = new AssignLoanStep1ViewModel
         {
-            AverageSystemDebt = 125450.00m,
+            AverageSystemDebt = averageDebt,
             SearchCedula = searchCedula,
             EligibleClients = clients
         };
@@ -294,69 +310,120 @@ public class AdminController : Controller
     }
 
     [HttpGet]
-    public IActionResult AssignLoanStep2(string clientId)
+    public async Task<IActionResult> AssignLoanStep2(string clientId)
     {
+        if (!Guid.TryParse(clientId, out var clientGuid))
+        {
+            TempData["ErrorMessage"] = "ID de cliente inválido.";
+            return RedirectToAction(nameof(AssignLoanStep1));
+        }
+
+        var client = await _userManager.FindByIdAsync(clientId);
+        if (client == null)
+        {
+            TempData["ErrorMessage"] = "Cliente no encontrado.";
+            return RedirectToAction(nameof(AssignLoanStep1));
+        }
+
         var model = new AssignLoanStep2ViewModel
         {
             ClientId = clientId,
-            ClientName = "Roberto Sánchez Almánzar",
-            ClientCedula = "001-1234567-8"
+            ClientName = $"{client.FirstName} {client.LastName}",
+            ClientCedula = client.Cedula
         };
         return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignLoanStep2(AssignLoanStep2ViewModel model)
+    public async Task<IActionResult> AssignLoanStep2(AssignLoanStep2ViewModel model)
     {
         if (!ModelState.IsValid)
             return View(model);
 
-        // simulation of risk evaluation
-        decimal systemAverage = 120000.00m;
-        decimal currentDebt = 45200.00m; 
-
-        //calulation of the projected debt after assigning the new loan
-        int n = model.TermInMonths <= 0 ? 1 : model.TermInMonths;
-        decimal r = (model.InterestRate / 100) / 12;
-        decimal P = model.Amount;
-        decimal C = model.InterestRate == 0 ? (P / n) : (P * (r * (decimal)Math.Pow((double)(1 + r), n)) / ((decimal)Math.Pow((double)(1 + r), n) - 1));
-        
-        // calculation of the total amount to pay and the projected debt
-        decimal totalToPay = C * n;
-        decimal projectedDebt = currentDebt + totalToPay;
-
-        // risk evaluation
-        if (projectedDebt > systemAverage)
+        if (!Guid.TryParse(model.ClientId, out var clientGuid))
         {
-            var riskModel = new RiskAlertViewModel
-            {
-                ClientId = model.ClientId,
-                CurrentDebt = currentDebt,
-                ProjectedDebt = projectedDebt,
-                SystemAverage = systemAverage,
-                Amount = model.Amount,
-                InterestRate = model.InterestRate,
-                TermInMonths = model.TermInMonths,
-                WarningMessage = currentDebt > systemAverage 
-                    ? "Este cliente se considera de alto riesgo, ya que su deuda actual supera el promedio del sistema."
-                    : "Asignar este préstamo convertirá al cliente en un cliente de alto riesgo, ya que su deuda superará el umbral promedio del sistema."
-            };
-            return View("RiskAlert", riskModel); 
+            TempData["ErrorMessage"] = "ID de cliente inválido.";
+            return RedirectToAction(nameof(AssignLoanStep1));
         }
 
-        TempData["SuccessMessage"] = "Préstamo asignado y desembolsado correctamente (Sin riesgo).";
+        // Get the current admin's ID
+        var adminUser = await _userManager.GetUserAsync(User);
+        var adminId = adminUser?.Id ?? Guid.Empty;
+
+        var dto = new CreateLoanDto
+        {
+            ClientId = clientGuid,
+            ApprovedAmount = model.Amount,
+            AnnualInterestRate = model.InterestRate,
+            Term = model.TermInMonths,
+            AdminId = adminId,
+            ConfirmHighRisk = false
+        };
+
+        var result = await _loanAppService.CreateLoanAsync(dto);
+
+        if (!result.Success)
+        {
+            if (result.IsHighRiskConflict)
+            {
+                var riskModel = new RiskAlertViewModel
+                {
+                    ClientId = model.ClientId,
+                    CurrentDebt = result.CurrentDebt,
+                    ProjectedDebt = result.ProjectedDebt,
+                    SystemAverage = result.AverageDebt,
+                    Amount = model.Amount,
+                    InterestRate = model.InterestRate,
+                    TermInMonths = model.TermInMonths,
+                    WarningMessage = result.ErrorMessage ?? string.Empty
+                };
+                return View("RiskAlert", riskModel);
+            }
+
+            TempData["ErrorMessage"] = result.ErrorMessage;
+            return View(model);
+        }
+
+        TempData["SuccessMessage"] = "Préstamo asignado y desembolsado correctamente.";
         return RedirectToAction(nameof(LoanManagement));
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ConfirmRiskLoan(RiskAlertViewModel model)
+    public async Task<IActionResult> ConfirmRiskLoan(RiskAlertViewModel model)
     {
         if (!ModelState.IsValid)
             return View("RiskAlert", model);
 
-        TempData["SuccessMessage"] = "Préstamo de alto riesgo asignado bajo su autorización.";
+        if (!Guid.TryParse(model.ClientId, out var clientGuid))
+        {
+            TempData["ErrorMessage"] = "ID de cliente inválido.";
+            return RedirectToAction(nameof(LoanManagement));
+        }
+
+        var adminUser = await _userManager.GetUserAsync(User);
+        var adminId = adminUser?.Id ?? Guid.Empty;
+
+        var dto = new CreateLoanDto
+        {
+            ClientId = clientGuid,
+            ApprovedAmount = model.Amount,
+            AnnualInterestRate = model.InterestRate,
+            Term = model.TermInMonths,
+            AdminId = adminId,
+            ConfirmHighRisk = true
+        };
+
+        var result = await _loanAppService.CreateLoanAsync(dto);
+
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.ErrorMessage;
+            return RedirectToAction(nameof(LoanManagement));
+        }
+
+        TempData["SuccessMessage"] = "Préstamo de alto riesgo asignado y desembolsado bajo su autorización.";
         return RedirectToAction(nameof(LoanManagement));
     }
 
