@@ -8,7 +8,7 @@ using Domain.Entities;
 
 namespace Web.Controllers;
 
-//[Authorize(Roles = "Administrador")]
+[Authorize(Roles = "Administrador")]
 public class AdminController : Controller
 {
     private readonly ILoanAppService _loanAppService;
@@ -221,29 +221,34 @@ public class AdminController : Controller
     {
         return ToggleUserStatus(id);
     }
-
-    // LOAN MODULE
-
-
-
-   [HttpGet]
+[HttpGet]
     public async Task<IActionResult> LoanManagement(string statusFilter = "Activos", string searchCedula = "", int page = 1)
     {
         var domainStatus = statusFilter == "Activos" ? "Activo" : statusFilter == "Completados" ? "Completado" : null;
         var loansDto = await _loanAppService.GetLoansAsync(domainStatus, searchCedula);
         
-        var loans = loansDto.Select(l => new LoanViewModel
+        var pageSize = 20;
+        var totalRecords = loansDto.Count;
+        var totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
+        var pagedLoans = loansDto.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        var loans = new List<LoanViewModel>();
+        foreach (var l in pagedLoans)
         {
-            Id = l.Id.ToString(),
-            LoanNumber = l.LoanNumber,
-            ClientName = "Cliente", // Ideally fetched from user service
-            ClientCedula = searchCedula, // Simplification for UI binding
-            ApprovedCapital = l.ApprovedAmount,
-            InterestRate = l.AnnualInterestRate,
-            TermInMonths = l.Term,
-            LoanStatus = l.Status,
-            PendingAmount = l.PendingAmount
-        }).ToList();
+            var user = await _userManager.FindByIdAsync(l.ClientId.ToString());
+            loans.Add(new LoanViewModel
+            {
+                Id = l.Id.ToString(),
+                LoanNumber = l.LoanNumber,
+                ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "Desconocido",
+                ClientCedula = user?.Cedula ?? "N/A",
+                ApprovedCapital = l.ApprovedAmount,
+                InterestRate = l.AnnualInterestRate,
+                TermInMonths = l.Term,
+                LoanStatus = l.Status,
+                PendingAmount = l.PendingAmount
+            });
+        }
 
         var model = new LoanListViewModel
         {
@@ -251,8 +256,8 @@ public class AdminController : Controller
             CurrentFilter = statusFilter,
             SearchCedula = searchCedula,
             CurrentPage = page,
-            TotalPages = 1,
-            TotalRecords = loans.Count
+            TotalPages = totalPages,
+            TotalRecords = totalRecords
         };
 
         return View(model);
@@ -273,6 +278,7 @@ public class AdminController : Controller
         }
 
         var (averageDebt, _) = await _loanAppService.GetAverageDebtAsync();
+        var allLoans = await _loanAppService.GetLoansAsync(null, "");
 
         var clients = new List<ClientSelectionViewModel>();
         foreach (var c in activeClients)
@@ -283,7 +289,7 @@ public class AdminController : Controller
                 Cedula = c.Cedula,
                 FullName = $"{c.FirstName} {c.LastName}",
                 Email = c.Email ?? string.Empty,
-                TotalDebt = 0 // Will be evaluated during loan creation
+                TotalDebt = allLoans.Where(l => l.ClientId.ToString() == c.Id && l.Status == "Activo").Sum(l => l.PendingAmount)
             });
         }
 
@@ -297,7 +303,7 @@ public class AdminController : Controller
         return View(model);
     }
 
-    [HttpPost]
+[HttpPost]
     [ValidateAntiForgeryToken]
     public IActionResult AssignLoanStep1(AssignLoanStep1ViewModel model)
     {
@@ -348,7 +354,6 @@ public class AdminController : Controller
             return RedirectToAction(nameof(AssignLoanStep1));
         }
 
-        // Get the current admin's ID
         var adminUser = await _userManager.GetUserAsync(User);
         if (adminUser == null)
         {
@@ -448,12 +453,13 @@ public class AdminController : Controller
             return RedirectToAction(nameof(LoanManagement));
         }
         
+        var user = await _userManager.FindByIdAsync(loan.ClientId.ToString());
         var installments = await _loanAppService.GetInstallmentsAsync(id);
 
         var model = new LoanDetailsViewModel
         {
             LoanNumber = loan.LoanNumber,
-            ClientName = "Cliente",
+            ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "Desconocido",
             ApprovedAmount = loan.ApprovedAmount,
             InterestRate = loan.AnnualInterestRate,
             TermInMonths = loan.Term,
@@ -476,8 +482,6 @@ public class AdminController : Controller
         };
 
         return View(model);
-    }
-
     [HttpGet]
     public async Task<IActionResult> EditLoanRate(Guid id)
     {

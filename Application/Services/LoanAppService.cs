@@ -157,10 +157,11 @@ public class LoanAppService : ILoanAppService
 
         // Proceed to create loan
         await _unitOfWork.BeginTransactionAsync();
+        Loan loan = null;
         try
         {
             var loanNumber = await GenerateUniqueLoanNumberAsync();
-            var loan = new Loan
+            loan = new Loan
             {
                 ClientId = dto.ClientId,
                 LoanNumber = loanNumber,
@@ -277,6 +278,11 @@ public class LoanAppService : ILoanAppService
                 
                 _unitOfWork.LoanInstallments.Update(inst);
             }
+        }
+        else
+        {
+            // No future installments to recalculate
+            return (false, "No existen cuotas futuras pendientes para recalcular.");
         }
 
         await _unitOfWork.SaveChangesAsync();
