@@ -27,11 +27,12 @@ public class LoanAppService : ILoanAppService
 
     public async Task<IEnumerable<LoanDto>> GetLoansAsync(string? status = null, string? cedula = null)
     {
-        var loans = await _unitOfWork.Loans.GetAllAsync();
-        
+        var loansQuery = _unitOfWork.Loans.GetAllAsync().AsQueryable();
+        loansQuery = loansQuery.Include(l => l.Client).Include(l => l.Installments);
+
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<LoanStatus>(status, out var loanStatus))
         {
-            loans = loans.Where(l => l.Status == loanStatus);
+            loansQuery = loansQuery.Where(l => l.Status == loanStatus);
         }
 
         if (!string.IsNullOrEmpty(cedula))
@@ -39,10 +40,11 @@ public class LoanAppService : ILoanAppService
             var user = (await _unitOfWork.Users.FindAsync(u => u.Cedula == cedula)).FirstOrDefault();
             if (user != null)
             {
-                loans = loans.Where(l => l.ClientId == user.Id);
+                loansQuery = loansQuery.Where(l => l.ClientId == user.Id);
             }
         }
 
+        var loans = await loansQuery.ToListAsync();
         return _mapper.Map<IEnumerable<LoanDto>>(loans);
     }
 
@@ -70,7 +72,7 @@ public class LoanAppService : ILoanAppService
 
         var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
         if (primaryAccount == null)
-            return new LoanCreationResult { Success = false, ErrorMessage = "El cliente no tiene una cuenta de ahorro principal activa." };
+            return new LoanCreationResult { Success = false, ErrorMessage = "El cliente no tiene una cuenta de ahorro principal activa para recibir el desembolso del préstamo." };
 
         // 1. Calculate Average Debt of the System
         var (averageDebt, hasClients) = await GetAverageDebtAsync();
@@ -187,8 +189,8 @@ public class LoanAppService : ILoanAppService
         await _unitOfWork.SaveChangesAsync();
 
         // Send email notification
-        var subject = "Aprobación de Préstamo";
-        var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Su préstamo número {loan.LoanNumber} por un monto de {dto.ApprovedAmount:C} ha sido aprobado y acreditado a su cuenta principal.<br><br>Gracias por confiar en nosotros.";
+        var subject = "Préstamo aprobado";
+        var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Su préstamo número {loan.LoanNumber} por un monto de {dto.ApprovedAmount:C} ha sido aprobado y acreditado a su cuenta principal.<br>Plazo: {dto.Term} meses<br>Tasa de interés anual: {dto.AnnualInterestRate}%<br>Cuota mensual: {baseMonthlyPayment:C}<br><br>Gracias por confiar en nosotros.";
         try
         {
             if (!string.IsNullOrEmpty(client.Email))

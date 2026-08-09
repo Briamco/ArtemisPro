@@ -1,12 +1,21 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Application.Models.ViewModels.Admin;
+using Application.Interfaces.Services;
+using System.Linq;
 
 namespace Web.Controllers;
 
 //[Authorize(Roles = "Administrador")]
 public class AdminController : Controller
 {
+    private readonly ILoanAppService _loanAppService;
+
+    public AdminController(ILoanAppService loanAppService)
+    {
+        _loanAppService = loanAppService;
+    }
+
     public IActionResult Index()
     {
         int activeClients = _dummyUsers.Count(u => u.Role == "Cliente" && u.IsActive);
@@ -215,19 +224,32 @@ public class AdminController : Controller
         new LoanViewModel { Id = "3", LoanNumber = "726354890", ClientName = "Juan Gómez", ClientCedula = "0102345678", ApprovedCapital = 2000.00m, TotalInstallments = 12, PaidInstallments = 12, PendingAmount = 0.00m, InterestRate = 16.0m, TermInMonths = 12, LoanStatus = "Completado", ClientStatus = "Al día" }
     };
 
-   [HttpGet]
-    public IActionResult LoanManagement(string statusFilter = "Activos", string searchCedula = "", int page = 1)
+    [HttpGet]
+    public async Task<IActionResult> LoanManagement(string statusFilter = "Activos", string searchCedula = "", int page = 1)
     {
-        var query = _dummyLoans.AsQueryable();
+        // Retrieve loans from the application service
+        var status = statusFilter == "Activos" ? "Activo" : statusFilter == "Completados" ? "Completado" : null;
+        var loanDtos = await _loanAppService.GetLoansAsync(status, searchCedula);
 
-        if (statusFilter == "Activos")
+        // Map DTOs to the view model expected by the view
+        // Map DTOs to the view model expected by the view
+        var loanList = loanDtos.Select(l => new LoanViewModel
         {
-            query = query.Where(l => l.LoanStatus == "Activo");
-        }
-        else if (statusFilter == "Completados")
-        {
-            query = query.Where(l => l.LoanStatus == "Completado");
-        }
+            Id = l.Id.ToString(),
+            LoanNumber = l.LoanNumber,
+            ClientName = l.ClientName,
+            ClientCedula = l.ClientCedula,
+            ApprovedCapital = l.ApprovedAmount,
+            TotalInstallments = l.TotalInstallments,
+            PaidInstallments = l.PaidInstallments,
+            PendingAmount = l.PendingAmount,
+            InterestRate = l.AnnualInterestRate,
+            TermInMonths = l.Term,
+            LoanStatus = l.Status.ToString(),
+            ClientStatus = l.ClientStatus
+        }).ToList();
+
+        var query = loanList.AsQueryable();
 
         if (!string.IsNullOrEmpty(searchCedula))
         {
@@ -241,15 +263,15 @@ public class AdminController : Controller
 
         query = query.OrderBy(l => l.LoanStatus == "Completado" ? 1 : 0).ThenByDescending(l => l.Id);
 
-        var loans = query.ToList();
+        var filteredLoans = query.ToList();
         var model = new LoanListViewModel
         {
-            Loans = loans,
+            Loans = filteredLoans,
             CurrentFilter = statusFilter,
             SearchCedula = searchCedula,
             CurrentPage = page,
             TotalPages = 1,
-            TotalRecords = loans.Count
+            TotalRecords = filteredLoans.Count
         };
 
         return View(model);
