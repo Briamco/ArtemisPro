@@ -64,6 +64,21 @@ public class LoanAppService : ILoanAppService
         if (client == null)
             return new LoanCreationResult { Success = false, ErrorMessage = "Cliente no encontrado." };
 
+        if (!client.IsActive)
+            return new LoanCreationResult { Success = false, ErrorMessage = "El cliente no está activo." };
+
+        var activeLoan = await _unitOfWork.Loans.GetActiveByClientIdAsync(dto.ClientId);
+        if (activeLoan != null)
+            return new LoanCreationResult { Success = false, ErrorMessage = "Este cliente ya tiene un préstamo activo asignado." };
+
+        var allowedTerms = new[] { 6, 12, 18, 24, 30, 36, 42, 48, 54, 60 };
+        if (!allowedTerms.Contains(dto.Term))
+            return new LoanCreationResult { Success = false, ErrorMessage = "El plazo seleccionado no es válido." };
+
+        var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
+        if (primaryAccount == null || primaryAccount.Status != AccountStatus.Activa)
+            return new LoanCreationResult { Success = false, ErrorMessage = "El cliente no tiene una cuenta de ahorro principal activa para recibir el desembolso del préstamo." };
+
         // 1. Calculate Average Debt of the System
         var (averageDebt, hasClients) = await GetAverageDebtAsync();
 
@@ -160,25 +175,21 @@ public class LoanAppService : ILoanAppService
         await GenerateInstallmentsAsync(loan, monthlyInterestRate, baseMonthlyPayment);
         
         // Credit approved amount to primary savings account
-        var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
-        if (primaryAccount != null)
-        {
-            primaryAccount.Balance += dto.ApprovedAmount;
-            _unitOfWork.SavingsAccounts.Update(primaryAccount);
+        primaryAccount.Balance += dto.ApprovedAmount;
+        _unitOfWork.SavingsAccounts.Update(primaryAccount);
 
-            var transaction = new Transaction
-            {
-                SavingsAccountId = primaryAccount.Id,
-                Amount = dto.ApprovedAmount,
-                Type = TransactionType.Credito,
-                Status = TransactionStatus.Aprobada,
-                Date = DateTime.UtcNow,
-                Origin = "Desembolso de Préstamo",
-                Beneficiary = $"{client.FirstName} {client.LastName}"
-            };
-            
-            await _unitOfWork.Transactions.AddAsync(transaction);
-        }
+        var transaction = new Transaction
+        {
+            SavingsAccountId = primaryAccount.Id,
+            Amount = dto.ApprovedAmount,
+            Type = TransactionType.Credito,
+            Status = TransactionStatus.Aprobada,
+            Date = DateTime.UtcNow,
+            Origin = "Desembolso de Préstamo",
+            Beneficiary = $"{client.FirstName} {client.LastName}"
+        };
+        
+        await _unitOfWork.Transactions.AddAsync(transaction);
 
         await _unitOfWork.SaveChangesAsync();
 
@@ -208,7 +219,71 @@ public class LoanAppService : ILoanAppService
 
         loan.AnnualInterestRate = dto.AnnualInterestRate;
         _unitOfWork.Loans.Update(loan);
+
+        var installments = await _unitOfWork.LoanInstallments.FindAsync(i => i.LoanId == id);
+        var futureInstallments = installments
+            .Where(i => i.DueDate > DateTime.UtcNow && i.PaymentStatus == PaymentStatus.Pendiente)
+            .OrderBy(i => i.InstallmentNumber)
+            .ToList();
+
+        if (futureInstallments.Any())
+        {
+            decimal pendingPrincipal = futureInstallments.Sum(i => i.CapitalAmount);
+            decimal monthlyInterestRate = (dto.AnnualInterestRate / 100m) / 12m;
+            int remainingTerm = futureInstallments.Count;
+
+            decimal newMonthlyPayment = 0;
+            if (monthlyInterestRate > 0)
+            {
+                var factor = (decimal)Math.Pow((double)(1 + monthlyInterestRate), remainingTerm);
+                newMonthlyPayment = Math.Round(pendingPrincipal * (monthlyInterestRate * factor) / (factor - 1), 2);
+            }
+            else
+            {
+                newMonthlyPayment = Math.Round(pendingPrincipal / remainingTerm, 2);
+            }
+
+            decimal tempBalance = pendingPrincipal;
+            for (int i = 0; i < remainingTerm; i++)
+            {
+                var inst = futureInstallments[i];
+                decimal interestAmount = Math.Round(tempBalance * monthlyInterestRate, 2);
+                decimal capitalAmount = Math.Round(newMonthlyPayment - interestAmount, 2);
+                decimal paymentAmount = newMonthlyPayment;
+
+                if (i == remainingTerm - 1) // Adjust last payment to fix decimals
+                {
+                    capitalAmount = Math.Round(tempBalance, 2);
+                    paymentAmount = Math.Round(capitalAmount + interestAmount, 2);
+                }
+
+                tempBalance -= capitalAmount;
+
+                inst.Amount = paymentAmount;
+                inst.InterestAmount = interestAmount;
+                inst.CapitalAmount = capitalAmount;
+                inst.PendingBalance = paymentAmount; // Pending amount is full for these
+                
+                _unitOfWork.LoanInstallments.Update(inst);
+            }
+        }
+
         await _unitOfWork.SaveChangesAsync();
+
+        var client = await _unitOfWork.Users.GetByIdAsync(loan.ClientId);
+        if (client != null && !string.IsNullOrEmpty(client.Email))
+        {
+            var subject = "Actualización de Tasa de Interés";
+            var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Le informamos que la tasa de interés de su préstamo {loan.LoanNumber} ha sido actualizada a {dto.AnnualInterestRate}%. Sus cuotas futuras han sido recalculadas.<br><br>Atentamente,<br>Artemis Banking Pro";
+            try
+            {
+                await _emailService.SendAsync(client.Email, subject, body);
+            }
+            catch (Exception)
+            {
+                // Silence exception
+            }
+        }
 
         return (true, null);
     }

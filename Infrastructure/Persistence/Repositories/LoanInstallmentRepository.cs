@@ -36,8 +36,8 @@ public class LoanInstallmentRepository : BaseRepository<LoanInstallment>, ILoanI
             .Select(l => l.Id);
             
         return await _context.LoanInstallments
-            .Where(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus == Domain.Enums.PaymentStatus.Pendiente)
-            .SumAsync(i => (decimal?)i.Amount) ?? 0;
+            .Where(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus != Domain.Enums.PaymentStatus.Pagada)
+            .SumAsync(i => (decimal?)i.PendingBalance) ?? 0;
     }
 
     public async Task<decimal> GetTotalSystemPendingDebtAsync()
@@ -47,7 +47,7 @@ public class LoanInstallmentRepository : BaseRepository<LoanInstallment>, ILoanI
             .Select(l => l.Id);
             
         return await _context.LoanInstallments
-            .Where(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus == Domain.Enums.PaymentStatus.Pendiente)
-            .SumAsync(i => (decimal?)i.Amount) ?? 0;
+            .Where(i => activeLoanIds.Contains(i.LoanId) && i.PaymentStatus != Domain.Enums.PaymentStatus.Pagada)
+            .SumAsync(i => (decimal?)i.PendingBalance) ?? 0;
     }
 }
