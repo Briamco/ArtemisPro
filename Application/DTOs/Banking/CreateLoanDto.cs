@@ -18,4 +18,9 @@ public class CreateLoanDto
     [Required(ErrorMessage = "La tasa de interés anual es requerida.")]
     [Range(0, double.MaxValue, ErrorMessage = "La tasa de interés anual no puede ser negativa.")]
     public decimal AnnualInterestRate { get; set; }
+
+    [Required(ErrorMessage = "El identificador del administrador es requerido.")]
+    public Guid AdminId { get; set; }
+
+    public bool ConfirmHighRisk { get; set; } = false;
 }

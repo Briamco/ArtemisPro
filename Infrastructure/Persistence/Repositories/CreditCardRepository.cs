@@ -27,4 +27,18 @@ public class CreditCardRepository : BaseRepository<CreditCard>, ICreditCardRepos
             .OrderByDescending(cc => cc.CreatedAt)
             .ToListAsync();
     }
+
+    public async Task<decimal> GetTotalActiveDebtByClientIdAsync(Guid clientId)
+    {
+        return await _context.CreditCards
+            .Where(c => c.ClientId == clientId && c.Status == Domain.Enums.CardStatus.Activa)
+            .SumAsync(c => (decimal?)c.Debt) ?? 0;
+    }
+
+    public async Task<decimal> GetTotalSystemActiveDebtAsync()
+    {
+        return await _context.CreditCards
+            .Where(c => c.Status == Domain.Enums.CardStatus.Activa)
+            .SumAsync(c => (decimal?)c.Debt) ?? 0;
+    }
 }
