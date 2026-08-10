@@ -13,6 +13,7 @@ public static class ServiceRegistration
         services.AddScoped<IUserAppService, UserAppService>();
         services.AddScoped<ILoanAppService, LoanAppService>();
         services.AddScoped<IAdminDashboardAppService, AdminDashboardAppService>();
+        services.AddScoped<ICreditCardAppService, CreditCardAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
         return services;
     }

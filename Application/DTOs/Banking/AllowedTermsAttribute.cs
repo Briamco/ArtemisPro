@@ -14,7 +14,7 @@ namespace Application.DTOs.Banking
             ErrorMessage = "El plazo seleccionado no es válido. Los plazos permitidos son: 6, 12, 18, 24, 30, 36, 42, 48, 54, 60 meses.";
         }
 
-        public override bool IsValid(object value)
+        public override bool IsValid(object? value)
         {
             if (value == null) return true; // Required attribute handles null check
             if (int.TryParse(value.ToString(), out int term))
