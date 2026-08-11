@@ -1,0 +1,135 @@
+@model Application.Models.ViewModels.Client.ClientHomeViewModel
+@{
+    ViewData["Title"] = "Mis Productos";
+    Layout = "~/Views/Shared/_LayoutClient.cshtml";
+}
+
+<style>
+    .section-title { font-size: 1.3rem; font-weight: 700; color: white; margin: 35px 0 15px 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+    .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+    .product-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; justify-content: space-between; }
+    
+    .product-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
+    .product-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background-color: rgba(0, 229, 255, 0.1); color: var(--cyan-accent); }
+    .product-balance { font-size: 1.8rem; font-weight: 700; color: white; margin-bottom: 5px; }
+    
+    .btn-detail { background-color: transparent; border: 1px solid var(--border-color); color: white; padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; text-decoration: none; text-align: center; margin-top: 20px; transition: 0.2s; }
+    .btn-detail:hover { background-color: rgba(255,255,255,0.05); color: white; }
+    
+    .badge-principal { background-color: var(--cyan-accent); color: black; font-size: 0.65rem; padding: 3px 8px; border-radius: 12px; font-weight: 700; text-transform: uppercase; }
+    .badge-mora { background-color: rgba(255, 107, 107, 0.1); color: #FF6B6B; font-size: 0.65rem; padding: 3px 8px; border-radius: 12px; font-weight: 700; text-transform: uppercase; border: 1px solid #FF6B6B;}
+    .badge-aldia { background-color: rgba(0, 229, 255, 0.05); color: var(--cyan-accent); font-size: 0.65rem; padding: 3px 8px; border-radius: 12px; font-weight: 700; text-transform: uppercase; border: 1px solid var(--cyan-accent);}
+</style>
+
+<div>
+    <h1 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 5px;">Hola, Carlos</h1>
+    <p style="color: var(--text-muted);">Bienvenido a tu banca personal.</p>
+
+    @if (!Model.Accounts.Any() && !Model.Loans.Any() && !Model.Cards.Any())
+    {
+        <div class="alert alert-info mt-4" style="background-color: #141C2B; border: 1px solid var(--border-color); color: var(--text-muted); text-align: center; padding: 40px; border-radius: 12px;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 15px; opacity: 0.5;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <h4 style="color: white;">No posee productos financieros activos.</h4>
+        </div>
+    }
+    else
+    {
+        <!-- Cuentas de Ahorro -->
+        @if (Model.Accounts.Any())
+        {
+            <h3 class="section-title">Cuentas de Ahorro</h3>
+            <div class="product-grid">
+                @foreach (var acc in Model.Accounts)
+                {
+                    <div class="product-card">
+                        <div>
+                            <div class="product-header">
+                                <div class="product-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg></div>
+                                @if (acc.IsPrincipal) { <span class="badge-principal">Principal</span> }
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">Balance Disponible</div>
+                            <div class="product-balance">@acc.Balance.ToString("C")</div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-family: monospace;">No. @acc.AccountNumber</div>
+                        </div>
+                        <a asp-action="AccountDetails" asp-route-id="@acc.Id" class="btn-detail">Ver detalles</a>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Tarjetas de Crédito -->
+        @if (Model.Cards.Any())
+        {
+            <h3 class="section-title">Tarjetas de Crédito</h3>
+            <div class="product-grid">
+                @foreach (var card in Model.Cards)
+                {
+                    <div class="product-card">
+                        <div>
+                            <div class="product-header">
+                                <div class="product-icon" style="background-color: rgba(255, 107, 107, 0.1); color: #FF6B6B;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></div>
+                                <span style="font-size: 0.75rem; color: var(--text-muted);">Exp: @card.ExpirationDate</span>
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">Monto Adeudado</div>
+                            <div class="product-balance">@card.DebtAmount.ToString("C")</div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-family: monospace;">@card.MaskedNumber</div>
+                            <div style="font-size: 0.75rem; color: #4A5568; margin-top: 5px;">Límite: @card.CreditLimit.ToString("C")</div>
+                        </div>
+                        <a asp-action="CardDetails" asp-route-id="@card.Id" class="btn-detail">Ver detalles</a>
+                    </div>
+                }
+            </div>
+        }
+
+       <!-- Préstamos -->
+        @if (Model.Loans.Any())
+        {
+            <h3 class="section-title">Préstamos</h3>
+            <div class="product-grid">
+                @foreach (var loan in Model.Loans)
+                {
+                    <div class="product-card">
+                        <div>
+                            <div class="product-header">
+                                <div class="product-icon" style="background-color: rgba(74, 144, 226, 0.1); color: #4A90E2;">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                </div>
+                                <span class="@(loan.IsInMora ? "badge-mora" : "badge-aldia")">@(loan.IsInMora ? "En Mora" : "Al Día")</span>
+                            </div>
+                            
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">Monto Pendiente</div>
+                            <div class="product-balance">@loan.PendingAmount.ToString("C")</div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-family: monospace; margin-bottom: 15px;">No. @loan.LoanNumber</div>
+                            
+                            <!-- Caja interna con los nuevos requisitos -->
+                            <div style="background-color: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span style="font-size: 0.75rem; color: var(--text-muted);">Capital Aprobado</span>
+                                    <span style="font-size: 0.8rem; color: white; font-weight: 600;">@loan.ApprovedAmount.ToString("C")</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span style="font-size: 0.75rem; color: var(--text-muted);">Tasa de Interés</span>
+                                    <span style="font-size: 0.8rem; color: white; font-weight: 600;">@loan.InterestRate.ToString("0.0")% Anual</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span style="font-size: 0.75rem; color: var(--text-muted);">Plazo</span>
+                                    <span style="font-size: 0.8rem; color: white; font-weight: 600;">@loan.TermInMonths Meses</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Progreso de Cuotas -->
+                            <div style="height: 4px; background-color: #1F2A3D; border-radius: 2px;">
+                                <div style="height: 100%; width: @((double)loan.PaidInstallments / loan.TotalInstallments * 100)%; background-color: #4A90E2; border-radius: 2px;"></div>
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px; text-align: right;">
+                                Cuotas pagadas: <span style="color: white; font-weight: 600;">@loan.PaidInstallments</span> de @loan.TotalInstallments
+                            </div>
+                        </div>
+                        <a asp-action="LoanDetails" asp-route-id="@loan.Id" class="btn-detail">Ver detalles</a>
+                    </div>
+                }
+            </div>
+        }
+        
+    }
+</div>
