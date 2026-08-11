@@ -3,12 +3,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Application.Models.ViewModels.Admin;
 using Application.Interfaces.Services;
-<<<<<<< HEAD
-using System.Linq;
-=======
 using Application.DTOs.Banking;
 using Domain.Entities;
->>>>>>> origin/master
+using System.Linq;
 
 namespace Web.Controllers;
 
@@ -16,22 +13,14 @@ namespace Web.Controllers;
 public class AdminController : Controller
 {
     private readonly ILoanAppService _loanAppService;
-<<<<<<< HEAD
-
-    public AdminController(ILoanAppService loanAppService)
-    {
-        _loanAppService = loanAppService;
-    }
-
-    public IActionResult Index()
-=======
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ISavingsAccountAppService _savingsAccountAppService;
 
-    public AdminController(ILoanAppService loanAppService, UserManager<ApplicationUser> userManager)
->>>>>>> origin/master
+    public AdminController(ILoanAppService loanAppService, UserManager<ApplicationUser> userManager, ISavingsAccountAppService savingsAccountAppService)
     {
         _loanAppService = loanAppService;
         _userManager = userManager;
+        _savingsAccountAppService = savingsAccountAppService;
     }
 
     public async Task<IActionResult> Index()
@@ -243,7 +232,7 @@ public class AdminController : Controller
         var loansDto = await _loanAppService.GetLoansAsync(domainStatus, searchCedula);
 
         const int pageSize = 20;
-        var totalRecords = loansDto.Count;
+        var totalRecords = loansDto.Count();
         var totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
         var pagedLoans = loansDto.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
@@ -323,7 +312,7 @@ public class AdminController : Controller
                 Cedula = c.Cedula,
                 FullName = $"{c.FirstName} {c.LastName}",
                 Email = c.Email ?? string.Empty,
-                TotalDebt = allLoans.Where(l => l.ClientId.ToString() == c.Id && l.Status == "Activo").Sum(l => l.PendingAmount)
+                TotalDebt = allLoans.Where(l => l.ClientId.ToString() == c.Id.ToString() && l.Status == "Activo").Sum(l => l.PendingAmount)
             });
         }
 
@@ -516,6 +505,8 @@ public class AdminController : Controller
         };
 
         return View(model);
+    }
+
     [HttpGet]
     public async Task<IActionResult> EditLoanRate(Guid id)
     {
@@ -862,10 +853,22 @@ public class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignSavingsAccountStep2(AssignSavingsAccountStep2ViewModel model)
+    public async Task<IActionResult> AssignSavingsAccountStep2(AssignSavingsAccountStep2ViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
         
+        var dto = new CreateSavingsAccountDto 
+        { 
+            ClientId = Guid.Parse(model.ClientId), 
+            InitialBalance = model.InitialBalance 
+        };
+        var result = await _savingsAccountAppService.CreateSavingsAccountAsync(dto);
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error;
+            return View(model);
+        }
+
         TempData["SuccessMessage"] = $"Cuenta de ahorro secundaria asignada correctamente.{(model.InitialBalance > 0 ? " Transacción de CRÉDITO inicial registrada." : "")}";
         return RedirectToAction(nameof(SavingsAccountManagement));
     }
