@@ -37,7 +37,8 @@ public class BeneficiaryAppService : IBeneficiaryAppService
             var account = await _savingsAccountRepository.GetByAccountNumberAsync(dto.BeneficiaryAccountNumber);
             if (account != null && account.Client != null)
             {
-                dto.OwnerName = $"{account.Client.FirstName} {account.Client.LastName}";
+                dto.OwnerFirstName = account.Client.FirstName;
+                dto.OwnerLastName = account.Client.LastName;
             }
         }
 
