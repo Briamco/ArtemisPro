@@ -472,4 +472,86 @@ public class ClientController : Controller
         
         return RedirectToAction("CashAdvance"); 
     }
+
+    // transfer between accounts
+    [HttpGet]
+    public IActionResult Transfer()
+    {
+        var model = new TransferViewModel
+        {
+            MyActiveAccounts = new List<ClientAccountViewModel> 
+            { 
+                new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m },
+                new ClientAccountViewModel { Id = "acc2", AccountNumber = "987654321", Balance = 2500.00m }
+            }
+        };
+
+        if (model.MyActiveAccounts.Count < 2)
+        {
+            TempData["ErrorMessage"] = "Debe tener al menos dos cuentas de ahorro activas para realizar una transferencia entre cuentas.";
+        }
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult Transfer(TransferViewModel model)
+    {
+        model.MyActiveAccounts = new List<ClientAccountViewModel> 
+        { 
+            new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m },
+            new ClientAccountViewModel { Id = "acc2", AccountNumber = "987654321", Balance = 2500.00m }
+        };
+
+        if (model.MyActiveAccounts.Count < 2)
+        {
+            TempData["ErrorMessage"] = "Debe tener al menos dos cuentas de ahorro activas para realizar una transferencia entre cuentas.";
+            return View(model);
+        }
+
+        if (!ModelState.IsValid) return View(model);
+
+        var sourceAcc = model.MyActiveAccounts.FirstOrDefault(a => a.Id == model.SourceAccountId);
+        var destAcc = model.MyActiveAccounts.FirstOrDefault(a => a.Id == model.DestinationAccountId);
+
+        if (sourceAcc == null || destAcc == null) return View(model);
+
+        if (sourceAcc.Id == destAcc.Id)
+        {
+            ModelState.AddModelError("DestinationAccountId", "La cuenta de origen y la cuenta de destino no pueden ser la misma.");
+            return View(model);
+        }
+
+        if (model.Amount <= 0)
+        {
+            ModelState.AddModelError("Amount", "El monto a transferir debe ser mayor que cero.");
+            return View(model);
+        }
+
+        if (sourceAcc.Balance < model.Amount)
+        {
+            ModelState.AddModelError("Amount", "No dispone del monto requerido en la cuenta seleccionada.");
+            return View(model);
+        }
+
+        var confirmModel = new ConfirmTransferViewModel
+        {
+            SourceAccountId = sourceAcc.Id,
+            DestinationAccountId = destAcc.Id,
+            SourceAccountNumber = sourceAcc.AccountNumber,
+            DestinationAccountNumber = destAcc.AccountNumber,
+            Amount = model.Amount
+        };
+
+        return View("ConfirmTransfer", confirmModel);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult ExecuteTransfer(ConfirmTransferViewModel model)
+    {
+        TempData["SuccessMessage"] = "La transferencia fue realizada correctamente, pero no fue posible enviar el correo de notificación.";
+        return RedirectToAction("Transfer"); 
+    }
 } 

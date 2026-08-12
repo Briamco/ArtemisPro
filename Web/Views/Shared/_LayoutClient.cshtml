@@ -176,9 +176,12 @@
                     Avance de efectivo
                 </a>
             </li>
-            
+
             <li class="nav-item">
-                <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3L12 7L8 11"></path><path d="M12 7H4V21H20V7H16"></path></svg> Transferencia</a>
+                <a asp-controller="Client" asp-action="Transfer" class="nav-link @(currentAction == "Transfer" ? "active" : "")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3L12 7L8 11"></path><path d="M12 7H4V21H20V7H16"></path></svg> 
+                    Transferencia
+                </a>
             </li>
         </ul>
          
