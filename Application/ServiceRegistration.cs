@@ -15,6 +15,7 @@ public static class ServiceRegistration
         services.AddScoped<ISavingsAccountAppService, Application.Services.Banking.SavingsAccountAppService>();
         services.AddScoped<IAdminDashboardAppService, AdminDashboardAppService>();
         services.AddScoped<ICreditCardAppService, CreditCardAppService>();
+        services.AddScoped<IBeneficiaryAppService, Application.Services.Banking.BeneficiaryAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
         return services;
     }
