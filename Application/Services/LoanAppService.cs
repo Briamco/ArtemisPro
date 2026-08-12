@@ -28,8 +28,9 @@ public class LoanAppService : ILoanAppService
 
     public async Task<IEnumerable<LoanDto>> GetLoansAsync(string? status = null, string? cedula = null)
     {
-        var loans = await _unitOfWork.Loans.GetAllAsync();
-        
+        var loansQuery = _unitOfWork.Loans.Query();
+        loansQuery = loansQuery.Include(l => l.Client).Include(l => l.Installments);
+        IEnumerable<Loan> loans = await loansQuery.ToListAsync();
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<LoanStatus>(status, out var loanStatus))
         {
             loans = loans.Where(l => l.Status == loanStatus);
@@ -158,7 +159,7 @@ public class LoanAppService : ILoanAppService
 
         // Proceed to create loan
         await _unitOfWork.BeginTransactionAsync();
-        Loan loan = null;
+        Loan? loan = null;
         try
         {
             var loanNumber = await GenerateUniqueLoanNumberAsync();
