@@ -150,25 +150,26 @@
             <div class="sub-menu-title">Operaciones</div>
 
             <li class="nav-item">
-                <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> Transacciones</a>
+                <a data-bs-toggle="collapse" href="#transaccionesMenu" role="button" aria-expanded="@(currentAction.Contains("Transaction") || currentAction.Contains("Pay") ? "true" : "false")" aria-controls="transaccionesMenu" class="nav-link @(currentAction.Contains("Transaction") || currentAction.Contains("Pay") ? "active" : "")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> 
+                    Transacciones
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </a>
+                <div class="collapse @(currentAction.Contains("Transaction") || currentAction.Contains("Pay") ? "show" : "")" id="transaccionesMenu">
+                    <ul style="list-style: none; padding-left: 20px; margin-top: 5px; border-left: 1px solid rgba(255,255,255,0.05); margin-left: 30px;">
+                        <li class="nav-item"><a asp-controller="Client" asp-action="TransactionExpress" class="nav-link" style="padding: 8px 15px; font-size: 0.85rem;">Transacciones - Express</a></li>
+                        <li class="nav-item"><a asp-controller="Client" asp-action="PayCreditCard" class="nav-link" style="padding: 8px 15px; font-size: 0.85rem;">Transacciones - Tarjeta de crédito</a></li>
+                        <li class="nav-item"><a asp-controller="Client" asp-action="PayLoan" class="nav-link" style="padding: 8px 15px; font-size: 0.85rem;">Transacciones - Préstamo</a></li>
+                        <li class="nav-item"><a asp-controller="Client" asp-action="TransactionBeneficiary" class="nav-link" style="padding: 8px 15px; font-size: 0.85rem;">Transacciones - Beneficiarios</a></li>
+                    </ul>
+                </div>
             </li>
+
             <li class="nav-item">
-                <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Transacciones - Express</a>
+                <a asp-controller="Client" asp-action="Beneficiaries" class="nav-link @(currentAction.Contains("Beneficiary") && !currentAction.Contains("Transaction") ? "active" : "")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> Beneficiarios
+                </a>
             </li>
-            <li class="nav-item">
-                <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg> Transacciones - Tarjeta de crédito</a>
-            </li>
-            <li class="nav-item">
-                <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Transacciones - Préstamo</a>
-            </li>
-            <li class="nav-item">
-                <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> Transacciones - Beneficiarios</a>
-            </li>
-           <li class="nav-item">
-              <a asp-controller="Client" asp-action="Beneficiaries" class="nav-link @(currentAction.Contains("Beneficiary") ? "active" : "")">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> Mis Beneficiarios
-               </a>
-          </li>
             <li class="nav-item">
                 <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"></path><path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"></path><path d="M4 12v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"></path></svg> Avance de efectivo</a>
             </li>
@@ -176,6 +177,7 @@
                 <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3L12 7L8 11"></path><path d="M12 7H4V21H20V7H16"></path></svg> Transferencia</a>
             </li>
         </ul>
+         
 
         <form asp-controller="Account" asp-action="Logout" method="post" style="margin-top: auto;">
             @Html.AntiForgeryToken()

@@ -196,4 +196,209 @@ public class ClientController : Controller
         
         return RedirectToAction(nameof(Beneficiaries));
     }
-}
+
+    // express transaction
+    [HttpGet]
+    public IActionResult TransactionExpress()
+    {
+        var model = new TransactionExpressViewModel
+        {
+            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } }
+        };
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult TransactionExpress(TransactionExpressViewModel model)
+    {
+        // list of active accounts for simulation
+        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
+
+        if (!ModelState.IsValid) return View(model);
+
+        var sourceAcc = model.MyActiveAccounts.FirstOrDefault(a => a.Id == model.SourceAccountId);
+        if (sourceAcc == null) return View(model);
+
+        // validations
+        if (model.DestinationAccountNumber == "000000000") 
+        {
+            ModelState.AddModelError("DestinationAccountNumber", "El número de cuenta ingresado no corresponde a una cuenta válida.");
+            return View(model);
+        }
+        if (model.DestinationAccountNumber == sourceAcc.AccountNumber)
+        {
+            ModelState.AddModelError("DestinationAccountNumber", "La cuenta destino no puede ser la misma cuenta de origen.");
+            return View(model);
+        }
+
+        if (sourceAcc.Balance < model.Amount)
+        {
+            ModelState.AddModelError("Amount", "El monto ingresado excede el saldo disponible de la cuenta seleccionada.");
+            return View(model);
+        }
+
+        var confirmModel = new ConfirmTransactionExpressViewModel
+        {
+            SourceAccountId = model.SourceAccountId,
+            DestinationAccountNumber = model.DestinationAccountNumber,
+            DestinationOwnerName = "Usuario Destino Simulado", 
+            Amount = model.Amount
+        };
+
+        return View("ConfirmTransactionExpress", confirmModel);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult ExecuteTransactionExpress(ConfirmTransactionExpressViewModel model)
+    {
+        TempData["SuccessMessage"] = "¡Transacción Aprobada! El dinero ha sido enviado correctamente.";
+        return RedirectToAction(nameof(TransactionExpress)); 
+    }
+
+    //pay credit card
+    [HttpGet]
+    public IActionResult PayCreditCard()
+    {
+        var model = new PayCreditCardViewModel
+        {
+            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } },
+            MyActiveCards = new List<ClientCardViewModel> { new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", DebtAmount = 4500.00m } }
+        };
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult PayCreditCard(PayCreditCardViewModel model)
+    {
+        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
+        model.MyActiveCards = new List<ClientCardViewModel> { new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", DebtAmount = 4500.00m } };
+
+        if (!ModelState.IsValid) return View(model);
+
+        var sourceAcc = model.MyActiveAccounts.FirstOrDefault(a => a.Id == model.SourceAccountId);
+        var destCard = model.MyActiveCards.FirstOrDefault(c => c.Id == model.CreditCardId);
+
+        if (sourceAcc == null || destCard == null) return View(model);
+
+        if (destCard.DebtAmount <= 0)
+        {
+            ModelState.AddModelError("CreditCardId", "La tarjeta seleccionada no tiene deuda pendiente.");
+            return View(model);
+        }
+
+        decimal effectiveAmount = Math.Min(model.Amount, destCard.DebtAmount);
+
+        if (sourceAcc.Balance < effectiveAmount)
+        {
+            ModelState.AddModelError("Amount", "No dispone del monto requerido en la cuenta seleccionada.");
+            return View(model);
+        }
+
+        TempData["SuccessMessage"] = $"¡Pago Aprobado! Se ha procesado correctamente tu pago de {effectiveAmount:C} a la tarjeta.";
+        return RedirectToAction("PayCreditCard"); 
+    }
+
+    // loan payment 
+    [HttpGet]
+    public IActionResult PayLoan()
+    {
+        var model = new PayLoanViewModel
+        {
+            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } },
+            MyActiveLoans = new List<ClientLoanViewModel> { new ClientLoanViewModel { Id = "loan1", LoanNumber = "PR-2026-8942", PendingAmount = 114205.10m } }
+        };
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult PayLoan(PayLoanViewModel model)
+    {
+        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
+        model.MyActiveLoans = new List<ClientLoanViewModel> { new ClientLoanViewModel { Id = "loan1", LoanNumber = "PR-2026-8942", PendingAmount = 114205.10m } };
+
+        if (!ModelState.IsValid) return View(model);
+
+        var sourceAcc = model.MyActiveAccounts.FirstOrDefault(a => a.Id == model.SourceAccountId);
+        var destLoan = model.MyActiveLoans.FirstOrDefault(l => l.Id == model.LoanId);
+
+        if (sourceAcc == null || destLoan == null) return View(model);
+
+        if (destLoan.PendingAmount <= 0)
+        {
+            ModelState.AddModelError("LoanId", "El préstamo seleccionado no tiene cuotas pendientes de pago.");
+            return View(model);
+        }
+
+        decimal effectiveAmount = Math.Min(model.Amount, destLoan.PendingAmount);
+
+        if (sourceAcc.Balance < effectiveAmount)
+        {
+            ModelState.AddModelError("Amount", "No dispone del monto requerido en la cuenta seleccionada.");
+            return View(model);
+        }
+
+        TempData["SuccessMessage"] = $"¡Abono Aprobado! Se aplicó el pago de {effectiveAmount:C} a las cuotas de tu préstamo.";
+        return RedirectToAction("PayLoan"); 
+    }
+
+    // beneficiary transaction
+    [HttpGet]
+    public IActionResult TransactionBeneficiary()
+    {
+        var model = new TransactionBeneficiaryViewModel
+        {
+            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } },
+            MyBeneficiaries = new List<BeneficiaryViewModel> { new BeneficiaryViewModel { Id = "ben1", FirstName = "Pedro", LastName = "Martínez", AccountNumber = "777888999" } }
+        };
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult TransactionBeneficiary(TransactionBeneficiaryViewModel model)
+    {
+        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
+        model.MyBeneficiaries = new List<BeneficiaryViewModel> { new BeneficiaryViewModel { Id = "ben1", FirstName = "Pedro", LastName = "Martínez", AccountNumber = "777888999" } };
+
+        if (!ModelState.IsValid) return View(model);
+
+        if (!model.MyBeneficiaries.Any())
+        {
+            TempData["ErrorMessage"] = "No tiene beneficiarios registrados.";
+            return View(model);
+        }
+
+        var sourceAcc = model.MyActiveAccounts.FirstOrDefault(a => a.Id == model.SourceAccountId);
+        var beneficiary = model.MyBeneficiaries.FirstOrDefault(b => b.Id == model.BeneficiaryId);
+
+        if (sourceAcc == null || beneficiary == null) return View(model);
+
+        if (sourceAcc.Balance < model.Amount)
+        {
+            ModelState.AddModelError("Amount", "No dispone de fondos suficientes para realizar esta transacción.");
+            return View(model);
+        }
+
+        var confirmModel = new ConfirmTransactionBeneficiaryViewModel
+        {
+            SourceAccountId = model.SourceAccountId,
+            DestinationAccountNumber = beneficiary.AccountNumber,
+            DestinationOwnerName = $"{beneficiary.FirstName} {beneficiary.LastName}",
+            Amount = model.Amount
+        };
+
+        return View("ConfirmTransactionBeneficiary", confirmModel);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult ExecuteTransactionBeneficiary(ConfirmTransactionBeneficiaryViewModel model)
+    {
+        TempData["SuccessMessage"] = "¡Transacción Aprobada! Los fondos fueron transferidos al beneficiario exitosamente.";
+        return RedirectToAction("TransactionBeneficiary"); 
+    }
+} 
