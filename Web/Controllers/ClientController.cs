@@ -401,4 +401,75 @@ public class ClientController : Controller
         TempData["SuccessMessage"] = "¡Transacción Aprobada! Los fondos fueron transferidos al beneficiario exitosamente.";
         return RedirectToAction("TransactionBeneficiary"); 
     }
+
+    // cash advance
+    [HttpGet]
+    public IActionResult CashAdvance()
+    {
+        var model = new CashAdvanceViewModel
+        {
+            // cards and accounts for simulation
+            MyActiveCards = new List<ClientCardViewModel> { new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", CreditLimit = 50000m, DebtAmount = 45000m, ExpirationDate = "12/28" } },
+            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } }
+        };
+        return View(model);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult CashAdvance(CashAdvanceViewModel model)
+    {
+        model.MyActiveCards = new List<ClientCardViewModel> { new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", CreditLimit = 50000m, DebtAmount = 45000m, ExpirationDate = "12/28" } };
+        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
+
+        if (!ModelState.IsValid) return View(model);
+
+        var sourceCard = model.MyActiveCards.FirstOrDefault(c => c.Id == model.CreditCardId);
+        var destAccount = model.MyActiveAccounts.FirstOrDefault(a => a.Id == model.AccountId);
+
+        if (sourceCard == null || destAccount == null) return View(model);
+
+        bool isCardActive = true;
+        bool isCardExpired = false;
+        bool isAccountActive = true;
+
+        // validations 
+        if (!isCardActive)
+        {
+            ModelState.AddModelError("CreditCardId", "La tarjeta seleccionada no se encuentra activa.");
+            return View(model);
+        }
+
+        if (isCardExpired)
+        {
+            ModelState.AddModelError("CreditCardId", "La tarjeta seleccionada se encuentra vencida.");
+            return View(model);
+        }
+
+        if (!isAccountActive)
+        {
+            ModelState.AddModelError("AccountId", "La cuenta de ahorro seleccionada no se encuentra activa.");
+            return View(model);
+        }
+
+        if (model.Amount <= 0)
+        {
+            ModelState.AddModelError("Amount", "El monto del avance debe ser mayor que cero.");
+            return View(model);
+        }
+
+        decimal availableCredit = sourceCard.CreditLimit - sourceCard.DebtAmount;
+        decimal interest = model.Amount * 0.0625m; 
+        decimal totalCharge = model.Amount + interest;
+
+        if (totalCharge > availableCredit)
+        {
+            ModelState.AddModelError("Amount", "El avance solicitado excede el crédito disponible de la tarjeta seleccionada.");
+            return View(model);
+        }
+
+        TempData["SuccessMessage"] = "El avance fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
+        
+        return RedirectToAction("CashAdvance"); 
+    }
 } 

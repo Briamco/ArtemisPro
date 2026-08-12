@@ -170,9 +170,13 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> Beneficiarios
                 </a>
             </li>
-            <li class="nav-item">
-                <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"></path><path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"></path><path d="M4 12v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"></path></svg> Avance de efectivo</a>
+           <li class="nav-item">
+                <a asp-controller="Client" asp-action="CashAdvance" class="nav-link @(currentAction == "CashAdvance" ? "active" : "")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"></path><path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"></path><path d="M4 12v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"></path></svg> 
+                    Avance de efectivo
+                </a>
             </li>
+            
             <li class="nav-item">
                 <a href="#" class="nav-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3L12 7L8 11"></path><path d="M12 7H4V21H20V7H16"></path></svg> Transferencia</a>
             </li>
