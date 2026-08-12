@@ -71,7 +71,7 @@ public class SavingsAccountAppService : ISavingsAccountAppService
         
         if (primaryAccount == null || primaryAccount.Status != AccountStatus.Activa)
         {
-            return (false, "El cliente debe tener una cuenta de ahorro principal activa antes de asignarle una cuenta secundaria.");
+            return (false, "El cliente debe tener una cuenta de ahorro principal activa para poder asignarle una cuenta secundaria.");
         }
 
         await _unitOfWork.BeginTransactionAsync();
@@ -143,7 +143,7 @@ public class SavingsAccountAppService : ISavingsAccountAppService
         
         do
         {
-            accountNumber = RandomNumberGenerator.GetInt32(100000000, 999999999).ToString();
+            accountNumber = RandomNumberGenerator.GetInt32(100000000, 1000000000).ToString();
             
             existsInSavings = await _unitOfWork.SavingsAccounts.ExistsAsync(a => a.AccountNumber == accountNumber);
             existsInLoans = await _unitOfWork.Loans.ExistsAsync(l => l.LoanNumber == accountNumber);
