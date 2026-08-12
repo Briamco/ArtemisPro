@@ -54,23 +54,23 @@ public class BeneficiaryAppService : IBeneficiaryAppService
         var account = await _savingsAccountRepository.GetByAccountNumberAsync(dto.BeneficiaryAccountNumber);
         if (account == null)
         {
-            return (false, "La cuenta ingresada no existe.");
+            return (false, "El número de cuenta ingresado no corresponde a una cuenta válida.");
         }
 
         if (account.Status != AccountStatus.Activa)
         {
-            return (false, "La cuenta ingresada no está activa.");
+            return (false, "No puede agregar una cuenta cancelada como beneficiario.");
         }
 
         if (account.ClientId == clientId)
         {
-            return (false, "No puede agregar su propia cuenta como beneficiario.");
+            return (false, "No puede agregar una cuenta propia como beneficiario. Utilice la opción Transferencia para mover fondos entre sus cuentas.");
         }
 
         var existing = await _beneficiaryRepository.GetByClientAndAccountAsync(clientId, dto.BeneficiaryAccountNumber);
         if (existing != null)
         {
-            return (false, "La cuenta ya se encuentra registrada como beneficiario.");
+            return (false, "Esta cuenta ya se encuentra registrada como beneficiario.");
         }
 
         var beneficiary = new Beneficiary
