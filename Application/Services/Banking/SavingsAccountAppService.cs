@@ -66,6 +66,15 @@ public class SavingsAccountAppService : ISavingsAccountAppService
         {
             return (false, "El cliente no existe.");
         }
+        if (!user.IsActive)
+        {
+            return (false, "El cliente no está activo.");
+        }
+
+        if (!user.IsActive)
+        {
+            return (false, "El cliente está inactivo.");
+        }
 
         var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
         
@@ -122,17 +131,72 @@ public class SavingsAccountAppService : ISavingsAccountAppService
     {
         var account = await _unitOfWork.SavingsAccounts.GetByIdAsync(id);
         if (account == null) return (false, "La cuenta seleccionada no existe.");
+
+        if (account.Status == AccountStatus.Cancelada)
+        {
+            return (false, "La cuenta seleccionada ya se encuentra cancelada.");
+        }
         
         if (account.AccountType == AccountType.Principal)
         {
             return (false, "Las cuentas principales no pueden ser canceladas.");
         }
-        
-        account.Status = AccountStatus.Cancelada;
-        _unitOfWork.SavingsAccounts.Update(account);
-        await _unitOfWork.SaveChangesAsync();
-        
-        return (true, null);
+
+        var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(account.ClientId);
+        if (primaryAccount == null || primaryAccount.Status != AccountStatus.Activa)
+        {
+            return (false, "No es posible cancelar la cuenta porque el cliente no tiene una cuenta principal activa para recibir los fondos.");
+        }
+
+        await _unitOfWork.BeginTransactionAsync();
+        try
+        {
+            decimal transferAmount = account.Balance;
+            
+            if (transferAmount > 0)
+            {
+                var debitTransaction = new Transaction
+                {
+                    SavingsAccountId = account.Id,
+                    Amount = transferAmount,
+                    Type = TransactionType.Debito,
+                    Beneficiary = primaryAccount.AccountNumber,
+                    Origin = "Cancelación de cuenta",
+                    Status = TransactionStatus.Aprobada,
+                    Date = DateTime.UtcNow
+                };
+                await _unitOfWork.Transactions.AddAsync(debitTransaction);
+                
+                var creditTransaction = new Transaction
+                {
+                    SavingsAccountId = primaryAccount.Id,
+                    Amount = transferAmount,
+                    Type = TransactionType.Credito,
+                    Beneficiary = "Transferencia de cuenta cancelada",
+                    Origin = account.AccountNumber,
+                    Status = TransactionStatus.Aprobada,
+                    Date = DateTime.UtcNow
+                };
+                await _unitOfWork.Transactions.AddAsync(creditTransaction);
+
+                account.Balance = 0;
+                primaryAccount.Balance += transferAmount;
+                _unitOfWork.SavingsAccounts.Update(primaryAccount);
+            }
+
+            account.Status = AccountStatus.Cancelada;
+            _unitOfWork.SavingsAccounts.Update(account);
+            
+            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.CommitTransactionAsync();
+            
+            return (true, null);
+        }
+        catch (Exception)
+        {
+            await _unitOfWork.RollbackTransactionAsync();
+            return (false, "Ocurrió un error al transferir los fondos y cancelar la cuenta.");
+        }
     }
     
     private async Task<string> GenerateUniqueAccountNumberAsync()
