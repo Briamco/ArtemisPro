@@ -1,0 +1,41 @@
+@model Application.Models.ViewModels.Cashier.ConfirmWithdrawalViewModel
+@{ 
+    ViewData["Title"] = "Confirmar Retiro"; 
+    Layout = "~/Views/Shared/_LayoutCashier.cshtml"; 
+}
+
+<div style="display: flex; align-items: center; justify-content: center; height: 100%;">
+    <div style="background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 40px; text-align: center; max-width: 500px; width: 100%;">
+        
+        <div style="width: 70px; height: 70px; background-color: rgba(255, 107, 107, 0.1); border: 2px solid #FF6B6B; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #FF6B6B;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+        </div>
+        
+        <h2 style="color: white; font-weight: 700; margin-bottom: 10px;">Confirmar Retiro</h2>
+        <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 25px;">¿Está seguro que desea realizar este retiro?</p>
+        
+        <div style="background-color: #080D17; border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-bottom: 30px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Titular de la cuenta</span>
+                <span style="color: white; font-weight: 600;">@Model.OwnerName</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Número de cuenta origen</span>
+                <span style="color: white; font-family: monospace; font-size: 1.1rem;">@Model.AccountNumber</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Monto a retirar</span>
+                <span style="color: #FF6B6B; font-weight: 700; font-size: 1.4rem;">@Model.Amount.ToString("C")</span>
+            </div>
+        </div>
+
+        <form asp-action="ExecuteWithdrawal" method="post" class="d-flex justify-content-center gap-3">
+            <input type="hidden" asp-for="AccountNumber" />
+            <input type="hidden" asp-for="Amount" />
+            <input type="hidden" asp-for="OwnerName" />
+            
+            <a asp-action="Index" style="flex: 1; background-color: transparent; color: white; border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; font-weight: 600; text-decoration: none;">Cancelar</a>
+            <button type="submit" style="flex: 1; background-color: var(--cyan-accent); color: #000; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">Confirmar</button>
+        </form>
+    </div>
+</div>
