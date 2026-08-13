@@ -807,7 +807,7 @@ public class AdminController : Controller
             ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene cuentas de ahorro registradas.";
         }
 
-        query = query.OrderBy(a => a.Status.ToString() == "Cancelada" ? 1 : 0).ThenByDescending(a => a.Id);
+        query = query.OrderBy(a => a.Status.ToString() == "Cancelada" ? 1 : 0).ThenByDescending(a => a.CreatedAt);
 
         const int pageSize = 20;
         var totalRecords = query.Count();
@@ -819,7 +819,7 @@ public class AdminController : Controller
             Id = a.Id.ToString(),
             AccountNumber = a.AccountNumber,
             ClientName = a.ClientName,
-            ClientCedula = a.ClientCedula ?? "",
+            ClientCedula = "", // TODO: Map Cedula if needed
             Balance = a.Balance,
             AccountType = a.AccountType.ToString(),
             Status = a.Status.ToString()
