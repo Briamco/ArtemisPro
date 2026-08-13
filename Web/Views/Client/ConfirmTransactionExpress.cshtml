@@ -26,6 +26,10 @@
         </div>
 
         <form asp-action="ExecuteTransactionExpress" method="post" class="d-flex justify-content-center gap-3">
+            <input type="hidden" asp-for="SourceAccountId" />
+            <input type="hidden" asp-for="DestinationAccountNumber" />
+            <input type="hidden" asp-for="Amount" />
+            
             <a asp-action="Index" style="flex: 1; background-color: transparent; color: white; border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; font-weight: 600; text-decoration: none;">Cancelar</a>
             <button type="submit" style="flex: 1; background-color: var(--cyan-accent); color: #000; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">Confirmar</button>
         </form>

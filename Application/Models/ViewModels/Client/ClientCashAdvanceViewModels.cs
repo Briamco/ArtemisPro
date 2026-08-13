@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 
 namespace Application.Models.ViewModels.Client;
 
@@ -14,6 +15,9 @@ public class CashAdvanceViewModel
     [Range(0.01, double.MaxValue, ErrorMessage = "El monto del avance debe ser mayor que cero.")]
     public decimal Amount { get; set; }
 
+    [ValidateNever]
     public List<ClientCardViewModel> MyActiveCards { get; set; } = new();
+
+    [ValidateNever]
     public List<ClientAccountViewModel> MyActiveAccounts { get; set; } = new();
 }

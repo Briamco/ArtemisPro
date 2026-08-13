@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 
 namespace Application.Models.ViewModels.Client;
 
@@ -9,12 +10,14 @@ public class TransactionExpressViewModel
     public string SourceAccountId { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El número de cuenta destino es requerido.")]
+    [RegularExpression(@"^\d{9}$", ErrorMessage = "El número de cuenta debe contener exactamente 9 dígitos.")]
     public string DestinationAccountNumber { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El monto a transferir es requerido.")]
     [Range(0.01, double.MaxValue, ErrorMessage = "El monto a transferir debe ser mayor que cero.")]
     public decimal Amount { get; set; }
 
+    [ValidateNever]
     public List<ClientAccountViewModel> MyActiveAccounts { get; set; } = new();
 }
 
@@ -39,7 +42,10 @@ public class PayCreditCardViewModel
     [Range(0.01, double.MaxValue, ErrorMessage = "El monto a pagar debe ser mayor que cero.")]
     public decimal Amount { get; set; }
 
+    [ValidateNever]
     public List<ClientAccountViewModel> MyActiveAccounts { get; set; } = new();
+
+    [ValidateNever]
     public List<ClientCardViewModel> MyActiveCards { get; set; } = new();
 }
 
@@ -56,11 +62,14 @@ public class PayLoanViewModel
     [Range(0.01, double.MaxValue, ErrorMessage = "El monto a pagar debe ser mayor que cero.")]
     public decimal Amount { get; set; }
 
+    [ValidateNever]
     public List<ClientAccountViewModel> MyActiveAccounts { get; set; } = new();
+
+    [ValidateNever]
     public List<ClientLoanViewModel> MyActiveLoans { get; set; } = new();
 }
 
-// benefiaciary
+// beneficiary
 public class TransactionBeneficiaryViewModel
 {
     [Required(ErrorMessage = "La cuenta de origen es requerida.")]
@@ -73,7 +82,10 @@ public class TransactionBeneficiaryViewModel
     [Range(0.01, double.MaxValue, ErrorMessage = "El monto a transferir debe ser mayor que cero.")]
     public decimal Amount { get; set; }
 
+    [ValidateNever]
     public List<ClientAccountViewModel> MyActiveAccounts { get; set; } = new();
+
+    [ValidateNever]
     public List<BeneficiaryViewModel> MyBeneficiaries { get; set; } = new();
 }
 

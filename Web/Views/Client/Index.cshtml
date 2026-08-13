@@ -22,7 +22,7 @@
 </style>
 
 <div>
-    <h1 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 5px;">Hola, Carlos</h1>
+    <h1 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 5px;">Hola, @(User.Identity?.Name ?? "Cliente")</h1>
     <p style="color: var(--text-muted);">Bienvenido a tu banca personal.</p>
 
     @if (!Model.Accounts.Any() && !Model.Loans.Any() && !Model.Cards.Any())

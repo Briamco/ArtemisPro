@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 
 namespace Application.Models.ViewModels.Client;
 
@@ -14,6 +15,7 @@ public class TransferViewModel
     [Range(0.01, double.MaxValue, ErrorMessage = "El monto a transferir debe ser mayor que cero.")]
     public decimal Amount { get; set; }
 
+    [ValidateNever]
     public List<ClientAccountViewModel> MyActiveAccounts { get; set; } = new();
 }
 

@@ -23,6 +23,11 @@
             @TempData["SuccessMessage"]
         </div> 
     }
+    @if (TempData["ErrorMessage"] != null) { 
+        <div class="alert alert-danger" style="background-color: rgba(255, 107, 107, 0.1); border: 1px solid #FF6B6B; color: #FF6B6B; border-radius: 8px; padding: 15px; margin-bottom: 24px;">
+            @TempData["ErrorMessage"]
+        </div> 
+    }
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>

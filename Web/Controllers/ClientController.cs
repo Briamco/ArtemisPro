@@ -9,23 +9,11 @@ public class ClientController : Controller
     [HttpGet]
     public IActionResult Index()
     {
-        // simulation
-        var rawAccounts = new List<ClientAccountViewModel>
-        {
-            new ClientAccountViewModel { Id = "acc2", AccountNumber = "987654321", Balance = 15000.00m, IsPrincipal = false },
-            new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 5400.50m, IsPrincipal = true },
-            new ClientAccountViewModel { Id = "acc3", AccountNumber = "564738291", Balance = 2000.00m, IsPrincipal = false }
-        };
+        var rawAccounts = GetActiveAccounts();
 
-        var loans = new List<ClientLoanViewModel>
-        {
-            new ClientLoanViewModel { Id = "loan1", LoanNumber = "PR-2026-8942", ApprovedAmount = 150000m, TotalInstallments = 36, PaidInstallments = 9, PendingAmount = 114205.10m, InterestRate = 8.5m, TermInMonths = 36, IsInMora = false }
-        };
+        var loans = GetActiveLoans();
 
-        var cards = new List<ClientCardViewModel>
-        {
-            new ClientCardViewModel { Id = "card1", MaskedNumber = "**** **** **** 4921", CreditLimit = 50000m, ExpirationDate = "12/28", DebtAmount = 4500.25m }
-        };
+        var cards = GetActiveCards();
 
         var sortedAccounts = rawAccounts
             .OrderByDescending(a => a.IsPrincipal)
@@ -94,7 +82,7 @@ public class ClientController : Controller
     // --- beneficiary module ---
 
     // Simulations
-    private static readonly List<SystemAccountDto> _systemAccounts = new()
+    private readonly List<SystemAccountDto> _systemAccounts = new()
     {
         new SystemAccountDto { AccountNumber = "102938475", FirstName = "Carlos", LastName = "Mendoza", Status = "Activa", OwnerId = "CURRENT_USER" }, // Cuenta propia
         new SystemAccountDto { AccountNumber = "111222333", FirstName = "Juan", LastName = "Pérez", Status = "Activa", OwnerId = "OTHER_USER" }, // Cuenta válida
@@ -102,7 +90,7 @@ public class ClientController : Controller
         new SystemAccountDto { AccountNumber = "777888999", FirstName = "Pedro", LastName = "Martínez", Status = "Activa", OwnerId = "OTHER_USER" } // Cuenta válida (Ya agregada)
     };
 
-    private static List<BeneficiaryViewModel> _myBeneficiaries = new()
+    private List<BeneficiaryViewModel> _myBeneficiaries = new()
     {
         new BeneficiaryViewModel { Id = "b1", FirstName = "Pedro", LastName = "Martínez", AccountNumber = "777888999" }
     };
@@ -171,6 +159,8 @@ public class ClientController : Controller
     [HttpGet]
     public IActionResult DeleteBeneficiary(string id)
     {
+        if (string.IsNullOrWhiteSpace(id)) return RedirectToAction(nameof(Beneficiaries));
+
         var beneficiary = _myBeneficiaries.FirstOrDefault(b => b.Id == id);
         if (beneficiary == null) return RedirectToAction(nameof(Beneficiaries));
 
@@ -187,6 +177,8 @@ public class ClientController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult DeleteBeneficiaryConfirmed(string id)
     {
+        if (string.IsNullOrWhiteSpace(id)) return RedirectToAction(nameof(Beneficiaries));
+
         var beneficiary = _myBeneficiaries.FirstOrDefault(b => b.Id == id);
         if (beneficiary != null)
         {
@@ -203,7 +195,7 @@ public class ClientController : Controller
     {
         var model = new TransactionExpressViewModel
         {
-            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } }
+            MyActiveAccounts = GetActiveAccounts()
         };
         return View(model);
     }
@@ -212,8 +204,7 @@ public class ClientController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult TransactionExpress(TransactionExpressViewModel model)
     {
-        // list of active accounts for simulation
-        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
+        model.MyActiveAccounts = GetActiveAccounts();
 
         if (!ModelState.IsValid) return View(model);
 
@@ -263,8 +254,8 @@ public class ClientController : Controller
     {
         var model = new PayCreditCardViewModel
         {
-            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } },
-            MyActiveCards = new List<ClientCardViewModel> { new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", DebtAmount = 4500.00m } }
+            MyActiveAccounts = GetActiveAccounts(),
+            MyActiveCards = GetActiveCards()
         };
         return View(model);
     }
@@ -273,8 +264,8 @@ public class ClientController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult PayCreditCard(PayCreditCardViewModel model)
     {
-        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
-        model.MyActiveCards = new List<ClientCardViewModel> { new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", DebtAmount = 4500.00m } };
+        model.MyActiveAccounts = GetActiveAccounts();
+        model.MyActiveCards = GetActiveCards();
 
         if (!ModelState.IsValid) return View(model);
 
@@ -298,7 +289,7 @@ public class ClientController : Controller
         }
 
         TempData["SuccessMessage"] = $"¡Pago Aprobado! Se ha procesado correctamente tu pago de {effectiveAmount:C} a la tarjeta.";
-        return RedirectToAction("PayCreditCard"); 
+        return RedirectToAction(nameof(PayCreditCard)); 
     }
 
     // loan payment 
@@ -307,8 +298,8 @@ public class ClientController : Controller
     {
         var model = new PayLoanViewModel
         {
-            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } },
-            MyActiveLoans = new List<ClientLoanViewModel> { new ClientLoanViewModel { Id = "loan1", LoanNumber = "PR-2026-8942", PendingAmount = 114205.10m } }
+            MyActiveAccounts = GetActiveAccounts(),
+            MyActiveLoans = GetActiveLoans()
         };
         return View(model);
     }
@@ -317,8 +308,8 @@ public class ClientController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult PayLoan(PayLoanViewModel model)
     {
-        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
-        model.MyActiveLoans = new List<ClientLoanViewModel> { new ClientLoanViewModel { Id = "loan1", LoanNumber = "PR-2026-8942", PendingAmount = 114205.10m } };
+        model.MyActiveAccounts = GetActiveAccounts();
+        model.MyActiveLoans = GetActiveLoans();
 
         if (!ModelState.IsValid) return View(model);
 
@@ -342,7 +333,7 @@ public class ClientController : Controller
         }
 
         TempData["SuccessMessage"] = $"¡Abono Aprobado! Se aplicó el pago de {effectiveAmount:C} a las cuotas de tu préstamo.";
-        return RedirectToAction("PayLoan"); 
+        return RedirectToAction(nameof(PayLoan)); 
     }
 
     // beneficiary transaction
@@ -351,8 +342,8 @@ public class ClientController : Controller
     {
         var model = new TransactionBeneficiaryViewModel
         {
-            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } },
-            MyBeneficiaries = new List<BeneficiaryViewModel> { new BeneficiaryViewModel { Id = "ben1", FirstName = "Pedro", LastName = "Martínez", AccountNumber = "777888999" } }
+            MyActiveAccounts = GetActiveAccounts(),
+            MyBeneficiaries = _myBeneficiaries.ToList()
         };
         return View(model);
     }
@@ -361,8 +352,8 @@ public class ClientController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult TransactionBeneficiary(TransactionBeneficiaryViewModel model)
     {
-        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
-        model.MyBeneficiaries = new List<BeneficiaryViewModel> { new BeneficiaryViewModel { Id = "ben1", FirstName = "Pedro", LastName = "Martínez", AccountNumber = "777888999" } };
+        model.MyActiveAccounts = GetActiveAccounts();
+        model.MyBeneficiaries = _myBeneficiaries.ToList();
 
         if (!ModelState.IsValid) return View(model);
 
@@ -399,7 +390,7 @@ public class ClientController : Controller
     public IActionResult ExecuteTransactionBeneficiary(ConfirmTransactionBeneficiaryViewModel model)
     {
         TempData["SuccessMessage"] = "¡Transacción Aprobada! Los fondos fueron transferidos al beneficiario exitosamente.";
-        return RedirectToAction("TransactionBeneficiary"); 
+        return RedirectToAction(nameof(TransactionBeneficiary)); 
     }
 
     // cash advance
@@ -408,9 +399,8 @@ public class ClientController : Controller
     {
         var model = new CashAdvanceViewModel
         {
-            // cards and accounts for simulation
-            MyActiveCards = new List<ClientCardViewModel> { new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", CreditLimit = 50000m, DebtAmount = 45000m, ExpirationDate = "12/28" } },
-            MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } }
+            MyActiveCards = GetActiveCards(),
+            MyActiveAccounts = GetActiveAccounts()
         };
         return View(model);
     }
@@ -419,8 +409,8 @@ public class ClientController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult CashAdvance(CashAdvanceViewModel model)
     {
-        model.MyActiveCards = new List<ClientCardViewModel> { new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", CreditLimit = 50000m, DebtAmount = 45000m, ExpirationDate = "12/28" } };
-        model.MyActiveAccounts = new List<ClientAccountViewModel> { new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m } };
+        model.MyActiveCards = GetActiveCards();
+        model.MyActiveAccounts = GetActiveAccounts();
 
         if (!ModelState.IsValid) return View(model);
 
@@ -428,29 +418,6 @@ public class ClientController : Controller
         var destAccount = model.MyActiveAccounts.FirstOrDefault(a => a.Id == model.AccountId);
 
         if (sourceCard == null || destAccount == null) return View(model);
-
-        bool isCardActive = true;
-        bool isCardExpired = false;
-        bool isAccountActive = true;
-
-        // validations 
-        if (!isCardActive)
-        {
-            ModelState.AddModelError("CreditCardId", "La tarjeta seleccionada no se encuentra activa.");
-            return View(model);
-        }
-
-        if (isCardExpired)
-        {
-            ModelState.AddModelError("CreditCardId", "La tarjeta seleccionada se encuentra vencida.");
-            return View(model);
-        }
-
-        if (!isAccountActive)
-        {
-            ModelState.AddModelError("AccountId", "La cuenta de ahorro seleccionada no se encuentra activa.");
-            return View(model);
-        }
 
         if (model.Amount <= 0)
         {
@@ -470,7 +437,7 @@ public class ClientController : Controller
 
         TempData["SuccessMessage"] = "El avance fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
         
-        return RedirectToAction("CashAdvance"); 
+        return RedirectToAction(nameof(CashAdvance)); 
     }
 
     // transfer between accounts
@@ -479,11 +446,7 @@ public class ClientController : Controller
     {
         var model = new TransferViewModel
         {
-            MyActiveAccounts = new List<ClientAccountViewModel> 
-            { 
-                new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m },
-                new ClientAccountViewModel { Id = "acc2", AccountNumber = "987654321", Balance = 2500.00m }
-            }
+            MyActiveAccounts = GetActiveAccounts()
         };
 
         if (model.MyActiveAccounts.Count < 2)
@@ -498,11 +461,7 @@ public class ClientController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult Transfer(TransferViewModel model)
     {
-        model.MyActiveAccounts = new List<ClientAccountViewModel> 
-        { 
-            new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m },
-            new ClientAccountViewModel { Id = "acc2", AccountNumber = "987654321", Balance = 2500.00m }
-        };
+        model.MyActiveAccounts = GetActiveAccounts();
 
         if (model.MyActiveAccounts.Count < 2)
         {
@@ -552,6 +511,33 @@ public class ClientController : Controller
     public IActionResult ExecuteTransfer(ConfirmTransferViewModel model)
     {
         TempData["SuccessMessage"] = "La transferencia fue realizada correctamente, pero no fue posible enviar el correo de notificación.";
-        return RedirectToAction("Transfer"); 
+        return RedirectToAction(nameof(Transfer)); 
     }
-} 
+
+    #region Helper Methods
+    private List<ClientAccountViewModel> GetActiveAccounts()
+    {
+        return new List<ClientAccountViewModel>
+        {
+            new ClientAccountViewModel { Id = "acc1", AccountNumber = "102938475", Balance = 15000.50m, IsPrincipal = true },
+            new ClientAccountViewModel { Id = "acc2", AccountNumber = "987654321", Balance = 2500.00m, IsPrincipal = false }
+        };
+    }
+
+    private List<ClientCardViewModel> GetActiveCards()
+    {
+        return new List<ClientCardViewModel>
+        {
+            new ClientCardViewModel { Id = "card1", MaskedNumber = "**** 4921", CreditLimit = 50000m, DebtAmount = 4500.00m, ExpirationDate = "12/28" }
+        };
+    }
+
+    private List<ClientLoanViewModel> GetActiveLoans()
+    {
+        return new List<ClientLoanViewModel>
+        {
+            new ClientLoanViewModel { Id = "loan1", LoanNumber = "PR-2026-8942", PendingAmount = 114205.10m, ApprovedAmount = 150000m, TotalInstallments = 36, PaidInstallments = 9, InterestRate = 8.5m, TermInMonths = 36, IsInMora = false }
+        };
+    }
+    #endregion
+}
