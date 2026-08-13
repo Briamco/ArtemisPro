@@ -30,10 +30,10 @@ public class LoanAppService : ILoanAppService
     {
         var loansQuery = _unitOfWork.Loans.Query();
         loansQuery = loansQuery.Include(l => l.Client).Include(l => l.Installments);
-
+        IEnumerable<Loan> loans = await loansQuery.ToListAsync();
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<LoanStatus>(status, out var loanStatus))
         {
-            loansQuery = loansQuery.Where(l => l.Status == loanStatus);
+            loans = loans.Where(l => l.Status == loanStatus);
         }
 
         if (!string.IsNullOrEmpty(cedula))
@@ -43,10 +43,9 @@ public class LoanAppService : ILoanAppService
             {
                 return Enumerable.Empty<LoanDto>();
             }
-            loansQuery = loansQuery.Where(l => l.ClientId == user.Id);
+            loans = loans.Where(l => l.ClientId == user.Id);
         }
 
-        var loans = await loansQuery.ToListAsync();
         return _mapper.Map<IEnumerable<LoanDto>>(loans);
     }
 

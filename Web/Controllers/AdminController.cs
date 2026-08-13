@@ -19,17 +19,20 @@ public class AdminController : Controller
     private readonly Application.Interfaces.Services.IUserAppService _userService;
     private readonly ILoanAppService _loanAppService;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ISavingsAccountAppService _savingsAccountAppService;
 
     public AdminController(
         Application.Interfaces.Services.ICreditCardAppService creditCardService, 
         Application.Interfaces.Services.IUserAppService userService,
         ILoanAppService loanAppService, 
-        UserManager<ApplicationUser> userManager)
+        UserManager<ApplicationUser> userManager,
+        ISavingsAccountAppService savingsAccountAppService)
     {
         _creditCardService = creditCardService;
         _userService = userService;
         _loanAppService = loanAppService;
         _userManager = userManager;
+        _savingsAccountAppService = savingsAccountAppService;
     }
 
     public async Task<IActionResult> Index()
@@ -41,7 +44,8 @@ public class AdminController : Controller
         int inactiveClients = allClients.Count(u => !u.IsActive);
         int activeLoans = loans.Count(l => l.Status == "Activo");
         int activeCards = _dummyCards.Count(c => c.Status == "Activa");
-        int activeSavings = _dummySavings.Count(s => s.Status == "Activa");
+        var allSavings = await _savingsAccountAppService.GetSavingsAccountsAsync();
+        int activeSavings = allSavings.Count(s => s.Status == "Activa");
         int totalProducts = activeLoans + activeCards + activeSavings;
 
         decimal totalLoanDebt = loans.Where(l => l.Status == "Activo").Sum(l => l.PendingAmount);
@@ -515,7 +519,8 @@ public class AdminController : Controller
 
         return View(model);
     }
-    
+
+
     [HttpGet]
     public async Task<IActionResult> EditLoanRate(Guid id)
     {
@@ -787,67 +792,89 @@ public class AdminController : Controller
 
     // ACCOUNT MANAGEMENT
 
-    private static List<SavingsAccountViewModel> _dummySavings = new List<SavingsAccountViewModel>
-    {
-        new SavingsAccountViewModel { Id = "1", AccountNumber = "102938475", ClientName = "Carlos Mendoza", ClientCedula = "402-1234567-8", Balance = 15400.50m, AccountType = "Principal", Status = "Activa" },
-        new SavingsAccountViewModel { Id = "2", AccountNumber = "987654321", ClientName = "Carlos Mendoza", ClientCedula = "402-1234567-8", Balance = 2500.00m, AccountType = "Secundaria", Status = "Activa" },
-        new SavingsAccountViewModel { Id = "3", AccountNumber = "564738291", ClientName = "Laura V. Castillo", ClientCedula = "001-9876543-2", Balance = 0.00m, AccountType = "Secundaria", Status = "Cancelada" }
-    };
-
     [HttpGet]
-    public IActionResult SavingsAccountManagement(string statusFilter = "Activas", string typeFilter = "Todas", string searchCedula = "", int page = 1)
+    public async Task<IActionResult> SavingsAccountManagement(string statusFilter = "Activas", string typeFilter = "Todas", string searchCedula = "", int page = 1)
     {
-        var query = _dummySavings.AsQueryable();
-        //FILTERS 
-        if (statusFilter == "Activas") query = query.Where(a => a.Status == "Activa");
-        else if (statusFilter == "Canceladas") query = query.Where(a => a.Status == "Cancelada");
+        var domainStatus = statusFilter == "Activas" ? "Activa" : statusFilter == "Canceladas" ? "Cancelada" : null;
+        var domainType = typeFilter == "Principal" ? "Principal" : typeFilter == "Secundaria" ? "Secundaria" : null;
 
-        if (typeFilter == "Principal") query = query.Where(a => a.AccountType == "Principal");
-        else if (typeFilter == "Secundaria") query = query.Where(a => a.AccountType == "Secundaria");
+        var allAccounts = await _savingsAccountAppService.GetSavingsAccountsAsync(domainStatus, domainType, searchCedula);
+        
+        var query = allAccounts.AsQueryable();
 
-        if (!string.IsNullOrEmpty(searchCedula))
+        if (!string.IsNullOrEmpty(searchCedula) && !query.Any())
         {
-            query = query.Where(a => a.ClientCedula.Contains(searchCedula));
-            if (!query.Any()) ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene cuentas de ahorro registradas.";
+            ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene cuentas de ahorro registradas.";
         }
 
-        query = query.OrderBy(a => a.Status == "Cancelada" ? 1 : 0).ThenByDescending(a => a.Id);
+        query = query.OrderBy(a => a.Status.ToString() == "Cancelada" ? 1 : 0).ThenByDescending(a => a.CreatedAt);
 
-        var accounts = query.ToList();
+        const int pageSize = 20;
+        var totalRecords = query.Count();
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalRecords / (double)pageSize));
+        var accountsDto = query.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        var accounts = accountsDto.Select(a => new SavingsAccountViewModel
+        {
+            Id = a.Id.ToString(),
+            AccountNumber = a.AccountNumber,
+            ClientName = a.ClientName,
+            ClientCedula = "", // TODO: Map Cedula if needed
+            Balance = a.Balance,
+            AccountType = a.AccountType.ToString(),
+            Status = a.Status.ToString()
+        }).ToList();
+
         var model = new SavingsAccountListViewModel
         {
             Accounts = accounts,
             CurrentStatusFilter = statusFilter,
             CurrentTypeFilter = typeFilter,
             SearchCedula = searchCedula,
-            CurrentPage = page, TotalPages = 1, TotalRecords = accounts.Count
+            CurrentPage = page, TotalPages = totalPages, TotalRecords = totalRecords
         };
 
         return View(model);
     }
 
     [HttpGet]
-    public IActionResult AssignSavingsAccountStep1(string searchCedula = "")
+    public async Task<IActionResult> AssignSavingsAccountStep1(string searchCedula = "")
     {
-        var allClients = new List<ClientSelectionViewModel>
-        {
-            new ClientSelectionViewModel { Id = "c1", Cedula = "402-1234567-8", FullName = "Carlos E. Mendoza", Email = "cmendoza@example.com", TotalDebt = 8450.00m },
-            new ClientSelectionViewModel { Id = "c2", Cedula = "001-9876543-2", FullName = "Laura V. Castillo", Email = "lcastillo@example.com", TotalDebt = 0.00m }
-        };
+        var allClients = await _userManager.GetUsersInRoleAsync("Cliente");
+        var activeClients = allClients.Where(c => c.IsActive).ToList();
 
-        var query = allClients.AsQueryable();
-        if (!string.IsNullOrEmpty(searchCedula))
+        if (!string.IsNullOrWhiteSpace(searchCedula))
         {
-            query = query.Where(c => c.Cedula.Contains(searchCedula));
-            if (!query.Any()) ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula.";
+            var cleanSearch = searchCedula.Trim().Replace("-", "");
+            activeClients = activeClients.Where(c => 
+                c.Cedula.Contains(searchCedula.Trim(), StringComparison.OrdinalIgnoreCase) || 
+                c.Cedula.Replace("-", "").Contains(cleanSearch, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
-        return View(new AssignSavingsAccountStep1ViewModel { SearchCedula = searchCedula, EligibleClients = query.ToList() });
+        var eligibleClients = new List<ClientSelectionViewModel>();
+        foreach (var c in activeClients)
+        {
+            eligibleClients.Add(new ClientSelectionViewModel
+            {
+                Id = c.Id.ToString(),
+                Cedula = c.Cedula,
+                FullName = $"{c.FirstName} {c.LastName}",
+                Email = c.Email ?? string.Empty,
+                TotalDebt = 0 
+            });
+        }
+
+        if (!string.IsNullOrEmpty(searchCedula) && !eligibleClients.Any())
+        {
+            ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula.";
+        }
+
+        return View(new AssignSavingsAccountStep1ViewModel { SearchCedula = searchCedula, EligibleClients = eligibleClients });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignSavingsAccountStep1(AssignSavingsAccountStep1ViewModel model)
+    public async Task<IActionResult> AssignSavingsAccountStep1(AssignSavingsAccountStep1ViewModel model)
     {
         if (string.IsNullOrEmpty(model.SelectedClientId))
         {
@@ -855,8 +882,15 @@ public class AdminController : Controller
             return RedirectToAction(nameof(AssignSavingsAccountStep1));
         }
 
-        //simulation 
-        bool hasPrincipalAccount = true;
+        if (!Guid.TryParse(model.SelectedClientId, out var clientGuid))
+        {
+            TempData["ErrorMessage"] = "ID de cliente inválido.";
+            return RedirectToAction(nameof(AssignSavingsAccountStep1));
+        }
+
+        var clientAccounts = await _savingsAccountAppService.GetSavingsAccountsAsync();
+        var hasPrincipalAccount = clientAccounts.Any(a => a.ClientId == clientGuid && a.AccountType == "Principal" && a.Status == "Activa");
+
         if (!hasPrincipalAccount)
         {
             TempData["ErrorMessage"] = "El cliente debe tener una cuenta de ahorro principal activa antes de asignarle una cuenta secundaria.";
@@ -867,31 +901,55 @@ public class AdminController : Controller
     }
 
     [HttpGet]
-    public IActionResult AssignSavingsAccountStep2(string clientId)
+    public async Task<IActionResult> AssignSavingsAccountStep2(string clientId)
     {
-        var model = new AssignSavingsAccountStep2ViewModel { ClientId = clientId, ClientName = "Carlos E. Mendoza", ClientCedula = "402-1234567-8" };
+        if (!Guid.TryParse(clientId, out var gId)) return RedirectToAction(nameof(AssignSavingsAccountStep1));
+        var client = await _userManager.FindByIdAsync(clientId);
+        if (client == null) return RedirectToAction(nameof(AssignSavingsAccountStep1));
+
+        var model = new AssignSavingsAccountStep2ViewModel 
+        { 
+            ClientId = clientId, 
+            ClientName = $"{client.FirstName} {client.LastName}", 
+            ClientCedula = client.Cedula 
+        };
         return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignSavingsAccountStep2(AssignSavingsAccountStep2ViewModel model)
+    public async Task<IActionResult> AssignSavingsAccountStep2(AssignSavingsAccountStep2ViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
         
+        var dto = new CreateSavingsAccountDto 
+        { 
+            ClientId = Guid.Parse(model.ClientId), 
+            InitialBalance = model.InitialBalance 
+        };
+        var result = await _savingsAccountAppService.CreateSavingsAccountAsync(dto);
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error;
+            return View(model);
+        }
+
         TempData["SuccessMessage"] = $"Cuenta de ahorro secundaria asignada correctamente.{(model.InitialBalance > 0 ? " Transacción de CRÉDITO inicial registrada." : "")}";
         return RedirectToAction(nameof(SavingsAccountManagement));
     }
 
     [HttpGet]
-    public IActionResult SavingsAccountDetails(string id)
+    public async Task<IActionResult> SavingsAccountDetails(string id)
     {
-        var account = _dummySavings.FirstOrDefault(a => a.Id == id);
+        if (!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(SavingsAccountManagement));
+        var account = await _savingsAccountAppService.GetSavingsAccountByIdAsync(gId);
         if (account == null)
         {
             TempData["ErrorMessage"] = "La cuenta seleccionada no existe.";
             return RedirectToAction(nameof(SavingsAccountManagement));
         }
+
+        var txs = await _savingsAccountAppService.GetTransactionsAsync(gId);
 
         var model = new SavingsAccountDetailsViewModel
         {
@@ -899,31 +957,38 @@ public class AdminController : Controller
             ClientName = account.ClientName,
             CurrentBalance = account.Balance,
             AccountType = account.AccountType,
-            Transactions = new List<TransactionViewModel>
+            Transactions = txs.OrderByDescending(t => t.Date).Select(t => new TransactionViewModel
             {
-                new TransactionViewModel { Date = DateTime.Now.AddDays(-1), Amount = 500.00m, Type = "CRÉDITO", Beneficiary = account.AccountNumber, Origin = "DEPÓSITO", Status = "APROBADA" },
-                new TransactionViewModel { Date = DateTime.Now.AddDays(-3), Amount = 1200.00m, Type = "DÉBITO", Beneficiary = "RETIRO", Origin = account.AccountNumber, Status = "APROBADA" },
-                new TransactionViewModel { Date = DateTime.Now.AddDays(-5), Amount = 5000.00m, Type = "DÉBITO", Beneficiary = "8924", Origin = account.AccountNumber, Status = "RECHAZADA" }
-            }
+                Date = t.Date,
+                Amount = t.Amount,
+                Type = t.Type,
+                Beneficiary = t.Beneficiary,
+                Origin = t.Origin,
+                Status = t.Status
+            }).ToList()
         };
         return View(model);
     }
 
     [HttpGet]
-    public IActionResult CancelSavingsAccount(string id)
+    public async Task<IActionResult> CancelSavingsAccount(string id)
     {
-        var account = _dummySavings.FirstOrDefault(a => a.Id == id);
+        if (!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(SavingsAccountManagement));
+        var account = await _savingsAccountAppService.GetSavingsAccountByIdAsync(gId);
+        
         if (account == null) { TempData["ErrorMessage"] = "La cuenta seleccionada no existe."; return RedirectToAction(nameof(SavingsAccountManagement)); }
         if (account.AccountType == "Principal") { TempData["ErrorMessage"] = "Las cuentas principales no pueden ser canceladas."; return RedirectToAction(nameof(SavingsAccountManagement)); }
         
-        return View(new CancelSavingsAccountViewModel { Id = account.Id, AccountNumber = account.AccountNumber, CurrentBalance = account.Balance });
+        return View(new CancelSavingsAccountViewModel { Id = account.Id.ToString(), AccountNumber = account.AccountNumber, CurrentBalance = account.Balance });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult CancelSavingsAccountConfirmed(string id)
+    public async Task<IActionResult> CancelSavingsAccountConfirmed(string id)
     {
-        var account = _dummySavings.FirstOrDefault(a => a.Id == id);
+        if (!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(SavingsAccountManagement));
+        
+        var account = await _savingsAccountAppService.GetSavingsAccountByIdAsync(gId);
         if (account == null)
         {
             TempData["ErrorMessage"] = "La cuenta seleccionada no existe.";
@@ -936,15 +1001,23 @@ public class AdminController : Controller
             return RedirectToAction(nameof(SavingsAccountManagement));
         }
 
-        account.Status = "Cancelada";
+        decimal balance = account.Balance;
+        var result = await _savingsAccountAppService.CancelSavingsAccountAsync(gId);
         
-        if (account.Balance > 0)
+        if (result.Success)
         {
-            TempData["SuccessMessage"] = $"Cuenta secundaria cancelada exitosamente. El balance de {account.Balance:C} fue transferido a la cuenta principal del cliente.";
+            if (balance > 0)
+            {
+                TempData["SuccessMessage"] = $"Cuenta secundaria cancelada exitosamente. El balance de {balance:C} fue transferido a la cuenta principal del cliente.";
+            }
+            else
+            {
+                TempData["SuccessMessage"] = "Cuenta secundaria cancelada exitosamente.";
+            }
         }
         else
         {
-            TempData["SuccessMessage"] = "Cuenta secundaria cancelada exitosamente.";
+            TempData["ErrorMessage"] = result.Error;
         }
 
         return RedirectToAction(nameof(SavingsAccountManagement));
