@@ -66,6 +66,15 @@ public class SavingsAccountAppService : ISavingsAccountAppService
         {
             return (false, "El cliente no existe.");
         }
+        if (!user.IsActive)
+        {
+            return (false, "El cliente no está activo.");
+        }
+
+        if (!user.IsActive)
+        {
+            return (false, "El cliente está inactivo.");
+        }
 
         var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
         
@@ -126,6 +135,53 @@ public class SavingsAccountAppService : ISavingsAccountAppService
         if (account.AccountType == AccountType.Principal)
         {
             return (false, "Las cuentas principales no pueden ser canceladas.");
+        }
+        
+            try
+            {
+                decimal transferAmount = account.Balance;
+                
+                var debitTransaction = new Transaction
+                {
+                    SavingsAccountId = account.Id,
+                    Amount = transferAmount,
+                    Type = TransactionType.Debito,
+                    Beneficiary = "Transferencia a cuenta principal",
+                    Origin = "Cancelación de cuenta",
+                    Status = TransactionStatus.Aprobada,
+                    Date = DateTime.UtcNow
+                };
+                await _unitOfWork.Transactions.AddAsync(debitTransaction);
+                
+                account.Balance = 0;
+                account.Status = AccountStatus.Cancelada;
+                _unitOfWork.SavingsAccounts.Update(account);
+
+                var creditTransaction = new Transaction
+                {
+                    SavingsAccountId = primaryAccount.Id,
+                    Amount = transferAmount,
+                    Type = TransactionType.Credito,
+                    Beneficiary = "Transferencia de cuenta cancelada",
+                    Origin = "Cancelación de cuenta",
+                    Status = TransactionStatus.Aprobada,
+                    Date = DateTime.UtcNow
+                };
+                await _unitOfWork.Transactions.AddAsync(creditTransaction);
+                
+                primaryAccount.Balance += transferAmount;
+                _unitOfWork.SavingsAccounts.Update(primaryAccount);
+
+                await _unitOfWork.SaveChangesAsync();
+                await _unitOfWork.CommitTransactionAsync();
+                
+                return (true, null);
+            }
+            catch (Exception)
+            {
+                await _unitOfWork.RollbackTransactionAsync();
+                return (false, "Ocurrió un error al transferir los fondos y cancelar la cuenta.");
+            }
         }
         
         account.Status = AccountStatus.Cancelada;
