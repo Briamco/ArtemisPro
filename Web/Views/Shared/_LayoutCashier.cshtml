@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Artemis Pro Cajero</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #0B101E; 
+            --bg-sidebar: #080D17;
+            --bg-card: #141C2B;
+            --cyan-accent: #00E5FF;
+            --text-main: #FFFFFF;
+            --text-muted: #8A99AF;
+            --border-color: #1F2A3D;
+        }
+
+        body { background-color: var(--bg-main); color: var(--text-main); font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 280px; background-color: var(--bg-sidebar); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 25px 20px; }
+        .sidebar-brand { display: flex; align-items: center; gap: 12px; font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); }
+        .nav-menu { list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto; }
+        .nav-item { margin-bottom: 8px; }
+        .nav-link { display: flex; align-items: center; gap: 15px; color: var(--text-muted); text-decoration: none; padding: 12px 15px; border-radius: 8px; transition: all 0.3s ease; font-size: 0.9rem; font-weight: 500; }
+        .nav-link:hover, .nav-link.active { background-color: rgba(0, 229, 255, 0.1); color: var(--cyan-accent); }
+        .nav-link svg { width: 20px; height: 20px; }
+        .sub-menu-title { font-size: 0.7rem; color: #4A5568; text-transform: uppercase; letter-spacing: 1px; padding: 15px 15px 5px 15px; font-weight: 700; }
+        .logout-btn { color: #FF6B6B; margin-top: auto; }
+        .logout-btn:hover { background-color: rgba(255, 107, 107, 0.1); color: #FF8787; }
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; overflow-y: auto; }
+        .topbar { height: 70px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: flex-end; align-items: center; padding: 0 30px; background-color: var(--bg-main); position: sticky; top: 0; z-index: 10; }
+        .content-area { padding: 30px; }
+        .sidebar-toggle-btn { display: none; background: rgba(0, 229, 255, 0.1); border: 1px solid var(--border-color); color: var(--cyan-accent); border-radius: 8px; padding: 6px 10px; cursor: pointer; align-items: center; justify-content: center; }
+        .sidebar-toggle-btn:hover { background: rgba(0, 229, 255, 0.2); }
+
+        @@media (max-width: 768px) {
+            body { flex-direction: column; height: auto; min-height: 100vh; overflow-x: hidden; overflow-y: auto; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border-color); padding: 15px 20px; }
+            .sidebar-brand { margin-bottom: 0; padding-bottom: 0; border-bottom: none; justify-content: space-between; }
+            .sidebar-toggle-btn { display: inline-flex; }
+            .main-content { overflow-y: visible; flex-grow: 1; }
+            .topbar { height: auto; padding: 15px 20px; position: static; }
+            .content-area { padding: 20px 15px; }
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="d-flex align-items-center gap-2">
+                <div class="d-inline-flex p-2 rounded" style="background-color: rgba(0, 229, 255, 0.1);">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cyan-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="12" y1="12" x2="12" y2="12"></line><line x1="8" y1="12" x2="8" y2="12"></line><line x1="16" y1="12" x2="16" y2="12"></line></svg>
+                </div>
+                <span>Artemis Banking Pro</span>
+            </div>
+            <button class="sidebar-toggle-btn" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarContent" aria-expanded="false" aria-controls="sidebarContent" aria-label="Toggle navigation">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
+        </div>
+
+        <div class="collapse d-md-flex flex-column flex-grow-1" id="sidebarContent">
+            <ul class="nav-menu">
+                @{ var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? ""; }
+
+                <li class="nav-item">
+                    <a asp-controller="Cashier" asp-action="Index" class="nav-link @(currentAction == "Index" ? "active" : "")">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        Home
+                    </a>
+                </li>
+
+                <div class="sub-menu-title">Operaciones de Caja</div>
+
+                <li class="nav-item">
+                    <a asp-controller="Cashier" asp-action="Deposit" class="nav-link @(currentAction == "Deposit" ? "active" : "")">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg> 
+                        Depósito
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a asp-controller="Cashier" asp-action="Withdrawal" class="nav-link @(currentAction == "Withdrawal" ? "active" : "")">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg> 
+                        Retiro
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a asp-controller="Cashier" asp-action="PayCreditCard" class="nav-link @(currentAction == "PayCreditCard" ? "active" : "")">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg> 
+                        Pago a tarjeta de crédito
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a asp-controller="Cashier" asp-action="PayLoan" class="nav-link @(currentAction == "PayLoan" ? "active" : "")">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> 
+                        Pago a préstamo
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a asp-controller="Cashier" asp-action="ThirdPartyTransfer" class="nav-link @(currentAction == "ThirdPartyTransfer" ? "active" : "")">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> 
+                        Transacciones a cuentas de terceros
+                    </a>
+                </li>
+            </ul>
+
+            <form asp-controller="Account" asp-action="Logout" method="post" style="margin-top: auto; padding-top: 15px;">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="nav-link logout-btn" style="background: none; border: none; width: 100%; text-align: left; cursor: pointer;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    Cerrar sesión
+                </button>
+            </form>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="width: 38px; height: 38px; background: rgba(0,229,255,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--cyan-accent); font-weight: bold; border: 1px solid rgba(0,229,255,0.3);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                </div>
+                <div>
+                    <span style="font-size: 0.8rem; color: var(--text-muted); display: block; line-height: 1; margin-bottom: 3px;">Operador de Caja</span>
+                    <strong style="font-size: 0.95rem;">@(User.Identity?.Name ?? "Cajero")</strong>
+                </div>
+            </div>
+        </header>
+
+        <section class="content-area">
+            @RenderBody()
+        </section>
+    </main>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
