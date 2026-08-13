@@ -3,6 +3,8 @@ using System.Threading.Tasks;
 using Application.Interfaces.Repositories;
 using Persistence.Contexts;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace Persistence.Repositories;
 
@@ -74,5 +76,17 @@ public class UnitOfWork : IUnitOfWork
     public async Task<int> SaveChangesAsync()
     {
         return await _context.SaveChangesAsync();
+    }
+
+    public async Task<int> GetActiveClientsCountAsync()
+    {
+        var clientRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Cliente");
+        if (clientRole == null) return 0;
+        
+        return await _context.UserRoles
+            .Where(ur => ur.RoleId == clientRole.Id)
+            .Join(_context.Users, ur => ur.UserId, u => u.Id, (ur, u) => u)
+            .Where(u => u.IsActive)
+            .CountAsync();
     }
 }

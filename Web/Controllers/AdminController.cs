@@ -1,22 +1,54 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Application.Models.ViewModels.Admin;
+using Application.Interfaces.Services;
+using Application.DTOs.Banking;
+using Domain.Entities;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using System;
 
 namespace Web.Controllers;
 
-//[Authorize(Roles = "Administrador")]
+[Authorize(Roles = "Administrador")]
 public class AdminController : Controller
 {
-    public IActionResult Index()
+    private readonly Application.Interfaces.Services.ICreditCardAppService _creditCardService;
+    private readonly Application.Interfaces.Services.IUserAppService _userService;
+    private readonly ILoanAppService _loanAppService;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly ISavingsAccountAppService _savingsAccountAppService;
+
+    public AdminController(
+        Application.Interfaces.Services.ICreditCardAppService creditCardService, 
+        Application.Interfaces.Services.IUserAppService userService,
+        ILoanAppService loanAppService, 
+        UserManager<ApplicationUser> userManager,
+        ISavingsAccountAppService savingsAccountAppService)
     {
-        int activeClients = _dummyUsers.Count(u => u.Role == "Cliente" && u.IsActive);
-        int inactiveClients = _dummyUsers.Count(u => u.Role == "Cliente" && !u.IsActive);
-        int activeLoans = _dummyLoans.Count(l => l.LoanStatus == "Activo");
+        _creditCardService = creditCardService;
+        _userService = userService;
+        _loanAppService = loanAppService;
+        _userManager = userManager;
+        _savingsAccountAppService = savingsAccountAppService;
+    }
+
+    public async Task<IActionResult> Index()
+    {
+        var loans = await _loanAppService.GetLoansAsync();
+        
+        var allClients = await _userManager.GetUsersInRoleAsync("Cliente");
+        int activeClients = allClients.Count(u => u.IsActive);
+        int inactiveClients = allClients.Count(u => !u.IsActive);
+        int activeLoans = loans.Count(l => l.Status == "Activo");
         int activeCards = _dummyCards.Count(c => c.Status == "Activa");
-        int activeSavings = _dummySavings.Count(s => s.Status == "Activa");
+        var allSavings = await _savingsAccountAppService.GetSavingsAccountsAsync();
+        int activeSavings = allSavings.Count(s => s.Status == "Activa");
         int totalProducts = activeLoans + activeCards + activeSavings;
 
-        decimal totalLoanDebt = _dummyLoans.Where(l => l.LoanStatus == "Activo").Sum(l => l.PendingAmount);
+        decimal totalLoanDebt = loans.Where(l => l.Status == "Activo").Sum(l => l.PendingAmount);
         decimal totalCardDebt = _dummyCards.Where(c => c.Status == "Activa").Sum(c => c.DebtAmount);
         int totalClientsForAvg = activeClients > 0 ? activeClients : 1;
         decimal avgDebt = Math.Round((totalLoanDebt + totalCardDebt) / totalClientsForAvg, 2);
@@ -206,75 +238,100 @@ public class AdminController : Controller
         return ToggleUserStatus(id);
     }
 
-    // LOAN MODULE
-
-    private static List<LoanViewModel> _dummyLoans = new List<LoanViewModel>
+    [HttpGet]
+    public async Task<IActionResult> LoanManagement(string statusFilter = "Activos", string searchCedula = "", int page = 1)
     {
-        new LoanViewModel { Id = "1", LoanNumber = "948271053", ClientName = "Roberto Carlos", ClientCedula = "0912345678", ApprovedCapital = 15000.00m, TotalInstallments = 48, PaidInstallments = 12, PendingAmount = 11250.00m, InterestRate = 14.5m, TermInMonths = 48, LoanStatus = "Activo", ClientStatus = "Al día" },
-        new LoanViewModel { Id = "2", LoanNumber = "837492011", ClientName = "María Suárez", ClientCedula = "1723456789", ApprovedCapital = 5500.00m, TotalInstallments = 24, PaidInstallments = 8, PendingAmount = 3666.67m, InterestRate = 12.0m, TermInMonths = 24, LoanStatus = "Activo", ClientStatus = "En mora" },
-        new LoanViewModel { Id = "3", LoanNumber = "726354890", ClientName = "Juan Gómez", ClientCedula = "0102345678", ApprovedCapital = 2000.00m, TotalInstallments = 12, PaidInstallments = 12, PendingAmount = 0.00m, InterestRate = 16.0m, TermInMonths = 12, LoanStatus = "Completado", ClientStatus = "Al día" }
-    };
+        var domainStatus = statusFilter == "Activos" ? "Activo" : statusFilter == "Completados" ? "Completado" : null;
+        var loansDto = await _loanAppService.GetLoansAsync(domainStatus, searchCedula);
 
-   [HttpGet]
-    public IActionResult LoanManagement(string statusFilter = "Activos", string searchCedula = "", int page = 1)
-    {
-        var query = _dummyLoans.AsQueryable();
+        const int pageSize = 20;
+        var totalRecords = loansDto.Count();
+        var totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
+        var pagedLoans = loansDto.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
-        if (statusFilter == "Activos")
+        var loanList = new List<LoanViewModel>();
+        foreach (var l in pagedLoans)
         {
-            query = query.Where(l => l.LoanStatus == "Activo");
+            var user = await _userManager.FindByIdAsync(l.ClientId.ToString());
+            loanList.Add(new LoanViewModel
+            {
+                Id = l.Id.ToString(),
+                LoanNumber = l.LoanNumber,
+                ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "Desconocido",
+                ClientCedula = user?.Cedula ?? "N/A",
+                ApprovedCapital = l.ApprovedAmount,
+                TotalInstallments = l.TotalInstallments,
+                PaidInstallments = l.PaidInstallments,
+                PendingAmount = l.PendingAmount,
+                InterestRate = l.AnnualInterestRate,
+                TermInMonths = l.Term,
+                LoanStatus = l.Status.ToString(),
+                ClientStatus = l.ClientStatus
+            });
         }
-        else if (statusFilter == "Completados")
-        {
-            query = query.Where(l => l.LoanStatus == "Completado");
-        }
+
+        var query = loanList.AsQueryable();
 
         if (!string.IsNullOrEmpty(searchCedula))
         {
             query = query.Where(l => l.ClientCedula.Contains(searchCedula));
-            
             if (!query.Any())
             {
                 ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene préstamos registrados.";
             }
         }
 
-        query = query.OrderBy(l => l.LoanStatus == "Completado" ? 1 : 0).ThenByDescending(l => l.Id);
+        query = query.OrderBy(l => l.LoanStatus == "Completado" ? 1 : 0)
+                     .ThenByDescending(l => l.Id);
 
-        var loans = query.ToList();
+        var filteredLoans = query.ToList();
+
         var model = new LoanListViewModel
         {
-            Loans = loans,
+            Loans = filteredLoans,
             CurrentFilter = statusFilter,
             SearchCedula = searchCedula,
             CurrentPage = page,
-            TotalPages = 1,
-            TotalRecords = loans.Count
+            TotalPages = totalPages,
+            TotalRecords = totalRecords
         };
 
         return View(model);
     }
 
     [HttpGet]
-    public IActionResult AssignLoanStep1(string searchCedula = "")
+    public async Task<IActionResult> AssignLoanStep1(string searchCedula = "")
     {
-        var clients = new List<ClientSelectionViewModel>
-        {
-            new ClientSelectionViewModel { Id = "c1", Cedula = "402-1234567-8", FullName = "Juan Pérez Domínguez", Email = "juan.perez@email.com", TotalDebt = 0.00m },
-            new ClientSelectionViewModel { Id = "c2", Cedula = "001-9876543-2", FullName = "María Rodríguez Alba", Email = "m.rodriguez@empresa.com.do", TotalDebt = 15200.50m },
-            new ClientSelectionViewModel { Id = "c3", Cedula = "031-4567890-1", FullName = "Carlos Sánchez Mella", Email = "csanchez88@gmail.com", TotalDebt = 5000.00m }
-        };
+        var allClients = await _userManager.GetUsersInRoleAsync("Cliente");
+        var activeClients = allClients.Where(c => c.IsActive).ToList();
 
         if (!string.IsNullOrWhiteSpace(searchCedula))
         {
             var cleanSearch = searchCedula.Trim().Replace("-", "");
-            clients = clients.Where(c => c.Cedula.Contains(searchCedula.Trim(), StringComparison.OrdinalIgnoreCase) || 
-                                         c.Cedula.Replace("-", "").Contains(cleanSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+            activeClients = activeClients.Where(c => 
+                c.Cedula.Contains(searchCedula.Trim(), StringComparison.OrdinalIgnoreCase) || 
+                c.Cedula.Replace("-", "").Contains(cleanSearch, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        var (averageDebt, _) = await _loanAppService.GetAverageDebtAsync();
+        var allLoans = await _loanAppService.GetLoansAsync(null, "");
+
+        var clients = new List<ClientSelectionViewModel>();
+        foreach (var c in activeClients)
+        {
+            clients.Add(new ClientSelectionViewModel
+            {
+                Id = c.Id.ToString(),
+                Cedula = c.Cedula,
+                FullName = $"{c.FirstName} {c.LastName}",
+                Email = c.Email ?? string.Empty,
+                TotalDebt = allLoans.Where(l => l.ClientId.ToString() == c.Id.ToString() && l.Status == "Activo").Sum(l => l.PendingAmount)
+            });
         }
 
         var model = new AssignLoanStep1ViewModel
         {
-            AverageSystemDebt = 125450.00m,
+            AverageSystemDebt = averageDebt,
             SearchCedula = searchCedula,
             EligibleClients = clients
         };
@@ -282,7 +339,7 @@ public class AdminController : Controller
         return View(model);
     }
 
-    [HttpPost]
+[HttpPost]
     [ValidateAntiForgeryToken]
     public IActionResult AssignLoanStep1(AssignLoanStep1ViewModel model)
     {
@@ -296,116 +353,185 @@ public class AdminController : Controller
     }
 
     [HttpGet]
-    public IActionResult AssignLoanStep2(string clientId)
+    public async Task<IActionResult> AssignLoanStep2(string clientId)
     {
+        if (!Guid.TryParse(clientId, out var clientGuid))
+        {
+            TempData["ErrorMessage"] = "ID de cliente inválido.";
+            return RedirectToAction(nameof(AssignLoanStep1));
+        }
+
+        var client = await _userManager.FindByIdAsync(clientId);
+        if (client == null)
+        {
+            TempData["ErrorMessage"] = "Cliente no encontrado.";
+            return RedirectToAction(nameof(AssignLoanStep1));
+        }
+
         var model = new AssignLoanStep2ViewModel
         {
             ClientId = clientId,
-            ClientName = "Roberto Sánchez Almánzar",
-            ClientCedula = "001-1234567-8"
+            ClientName = $"{client.FirstName} {client.LastName}",
+            ClientCedula = client.Cedula
         };
         return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignLoanStep2(AssignLoanStep2ViewModel model)
+    public async Task<IActionResult> AssignLoanStep2(AssignLoanStep2ViewModel model)
     {
         if (!ModelState.IsValid)
             return View(model);
 
-        // simulation of risk evaluation
-        decimal systemAverage = 120000.00m;
-        decimal currentDebt = 45200.00m; 
-
-        //calulation of the projected debt after assigning the new loan
-        int n = model.TermInMonths <= 0 ? 1 : model.TermInMonths;
-        decimal r = (model.InterestRate / 100) / 12;
-        decimal P = model.Amount;
-        decimal C = model.InterestRate == 0 ? (P / n) : (P * (r * (decimal)Math.Pow((double)(1 + r), n)) / ((decimal)Math.Pow((double)(1 + r), n) - 1));
-        
-        // calculation of the total amount to pay and the projected debt
-        decimal totalToPay = C * n;
-        decimal projectedDebt = currentDebt + totalToPay;
-
-        // risk evaluation
-        if (projectedDebt > systemAverage)
+        if (!Guid.TryParse(model.ClientId, out var clientGuid))
         {
-            var riskModel = new RiskAlertViewModel
-            {
-                ClientId = model.ClientId,
-                CurrentDebt = currentDebt,
-                ProjectedDebt = projectedDebt,
-                SystemAverage = systemAverage,
-                Amount = model.Amount,
-                InterestRate = model.InterestRate,
-                TermInMonths = model.TermInMonths,
-                WarningMessage = currentDebt > systemAverage 
-                    ? "Este cliente se considera de alto riesgo, ya que su deuda actual supera el promedio del sistema."
-                    : "Asignar este préstamo convertirá al cliente en un cliente de alto riesgo, ya que su deuda superará el umbral promedio del sistema."
-            };
-            return View("RiskAlert", riskModel); 
+            TempData["ErrorMessage"] = "ID de cliente inválido.";
+            return RedirectToAction(nameof(AssignLoanStep1));
         }
 
-        TempData["SuccessMessage"] = "Préstamo asignado y desembolsado correctamente (Sin riesgo).";
+        var adminUser = await _userManager.GetUserAsync(User);
+        if (adminUser == null)
+        {
+            TempData["ErrorMessage"] = "No se pudo identificar el administrador actual.";
+            return RedirectToAction(nameof(AssignLoanStep1));
+        }
+        var adminId = adminUser.Id;
+
+        var dto = new CreateLoanDto
+        {
+            ClientId = clientGuid,
+            ApprovedAmount = model.Amount,
+            AnnualInterestRate = model.InterestRate,
+            Term = model.TermInMonths,
+            AdminId = adminId,
+            ConfirmHighRisk = false
+        };
+
+        var result = await _loanAppService.CreateLoanAsync(dto);
+
+        if (!result.Success)
+        {
+            if (result.IsHighRiskConflict)
+            {
+                var riskModel = new RiskAlertViewModel
+                {
+                    ClientId = model.ClientId,
+                    CurrentDebt = result.CurrentDebt,
+                    ProjectedDebt = result.ProjectedDebt,
+                    SystemAverage = result.AverageDebt,
+                    Amount = model.Amount,
+                    InterestRate = model.InterestRate,
+                    TermInMonths = model.TermInMonths,
+                    WarningMessage = result.ErrorMessage ?? string.Empty
+                };
+                return View("RiskAlert", riskModel);
+            }
+
+            TempData["ErrorMessage"] = result.ErrorMessage;
+            return View(model);
+        }
+
+        TempData["SuccessMessage"] = "Préstamo asignado y desembolsado correctamente.";
         return RedirectToAction(nameof(LoanManagement));
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ConfirmRiskLoan(RiskAlertViewModel model)
+    public async Task<IActionResult> ConfirmRiskLoan(RiskAlertViewModel model)
     {
         if (!ModelState.IsValid)
             return View("RiskAlert", model);
 
-        TempData["SuccessMessage"] = "Préstamo de alto riesgo asignado bajo su autorización.";
+        if (!Guid.TryParse(model.ClientId, out var clientGuid))
+        {
+            TempData["ErrorMessage"] = "ID de cliente inválido.";
+            return RedirectToAction(nameof(LoanManagement));
+        }
+
+        var adminUser = await _userManager.GetUserAsync(User);
+        if (adminUser == null)
+        {
+            TempData["ErrorMessage"] = "No se pudo identificar el administrador actual.";
+            return RedirectToAction(nameof(LoanManagement));
+        }
+        var adminId = adminUser.Id;
+
+        var dto = new CreateLoanDto
+        {
+            ClientId = clientGuid,
+            ApprovedAmount = model.Amount,
+            AnnualInterestRate = model.InterestRate,
+            Term = model.TermInMonths,
+            AdminId = adminId,
+            ConfirmHighRisk = true
+        };
+
+        var result = await _loanAppService.CreateLoanAsync(dto);
+
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.ErrorMessage;
+            return RedirectToAction(nameof(LoanManagement));
+        }
+
+        TempData["SuccessMessage"] = "Préstamo de alto riesgo asignado y desembolsado bajo su autorización.";
         return RedirectToAction(nameof(LoanManagement));
     }
 
     [HttpGet]
-    public IActionResult LoanDetails(string id)
+    public async Task<IActionResult> LoanDetails(Guid id)
     {
-        var loan = _dummyLoans.FirstOrDefault(l => l.Id == id);
+        var loan = await _loanAppService.GetLoanByIdAsync(id);
         if (loan == null)
         {
             TempData["ErrorMessage"] = "El préstamo seleccionado no existe.";
             return RedirectToAction(nameof(LoanManagement));
         }
+        
+        var user = await _userManager.FindByIdAsync(loan.ClientId.ToString());
+        var installments = await _loanAppService.GetInstallmentsAsync(id);
 
         var model = new LoanDetailsViewModel
         {
             LoanNumber = loan.LoanNumber,
-            ClientName = loan.ClientName,
-            ApprovedAmount = loan.ApprovedCapital,
-            InterestRate = loan.InterestRate,
-            TermInMonths = loan.TermInMonths,
-            LoanStatus = loan.LoanStatus,
+            ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "Desconocido",
+            ApprovedAmount = loan.ApprovedAmount,
+            InterestRate = loan.AnnualInterestRate,
+            TermInMonths = loan.Term,
+            LoanStatus = loan.Status,
             PendingBalance = loan.PendingAmount,
-            MonthlyQuote = loan.TermInMonths > 0 ? Math.Round(loan.PendingAmount / loan.TermInMonths, 2) : 0m,
-            StartDate = DateTime.Now.AddMonths(-loan.PaidInstallments),
+            MonthlyQuote = loan.ApprovedAmount / loan.Term,
+            StartDate = loan.CreatedAt,
             NextDueDate = DateTime.Now.AddMonths(1),
-            PaymentProgress = loan.TotalInstallments > 0 ? (int)((decimal)loan.PaidInstallments / loan.TotalInstallments * 100) : 0,
-            AmortizationTable = new List<AmortizationRowViewModel>
-            {
-                new AmortizationRowViewModel { InstallmentNumber = 1, DueDate = DateTime.Now.AddMonths(-2), InstallmentValue = 4735.25m, InterestAmount = 1062.50m, CapitalAmount = 3672.75m, PendingBalance = loan.ApprovedCapital - 3672.75m, PaymentStatus = "Pagada", IsOverdue = false },
-                new AmortizationRowViewModel { InstallmentNumber = 2, DueDate = DateTime.Now.AddMonths(-1), InstallmentValue = 4735.25m, InterestAmount = 1036.48m, CapitalAmount = 3698.77m, PendingBalance = loan.PendingAmount, PaymentStatus = "Parcial", IsOverdue = false }
-            }
+            PaymentProgress = 0,
+            AmortizationTable = installments.Select(i => new AmortizationRowViewModel {
+                InstallmentNumber = i.InstallmentNumber,
+                DueDate = i.DueDate,
+                InstallmentValue = i.Amount,
+                InterestAmount = i.InterestAmount,
+                CapitalAmount = i.CapitalAmount,
+                PendingBalance = i.PendingBalance,
+                PaymentStatus = i.PaymentStatus,
+                IsOverdue = i.IsOverdue
+            }).ToList()
         };
 
         return View(model);
     }
 
+
     [HttpGet]
-    public IActionResult EditLoanRate(string id)
+    public async Task<IActionResult> EditLoanRate(Guid id)
     {
-        var loan = _dummyLoans.FirstOrDefault(l => l.Id == id);
+        var loan = await _loanAppService.GetLoanByIdAsync(id);
         if (loan == null)
         {
             TempData["ErrorMessage"] = "El préstamo seleccionado no existe.";
             return RedirectToAction(nameof(LoanManagement));
         }
 
-        if (loan.LoanStatus != "Activo")
+        if (loan.Status != "Activo")
         {
             TempData["ErrorMessage"] = "Solo se puede modificar la tasa de interés de préstamos activos.";
             return RedirectToAction(nameof(LoanManagement));
@@ -413,8 +539,8 @@ public class AdminController : Controller
 
         var model = new EditLoanRateViewModel
         {
-            Id = loan.Id,
-            InterestRate = loan.InterestRate
+            Id = loan.Id.ToString(),
+            InterestRate = loan.AnnualInterestRate
         };
 
         return View(model);
@@ -422,25 +548,25 @@ public class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult EditLoanRate(EditLoanRateViewModel model)
+    public async Task<IActionResult> EditLoanRate(EditLoanRateViewModel model)
     {
         if (!ModelState.IsValid)
             return View(model);
-
-        var loan = _dummyLoans.FirstOrDefault(l => l.Id == model.Id);
-        if (loan == null)
+            
+        if (!Guid.TryParse(model.Id, out var loanId))
         {
-            TempData["ErrorMessage"] = "El préstamo seleccionado no existe.";
+            TempData["ErrorMessage"] = "ID de préstamo inválido.";
             return RedirectToAction(nameof(LoanManagement));
         }
 
-        if (loan.LoanStatus != "Activo")
+        var dto = new UpdateLoanRateDto { AnnualInterestRate = model.InterestRate };
+        var (success, error) = await _loanAppService.UpdateLoanRateAsync(loanId, dto);
+        
+        if (!success)
         {
-            TempData["ErrorMessage"] = "Solo se puede modificar la tasa de interés de préstamos activos.";
+            TempData["ErrorMessage"] = error;
             return RedirectToAction(nameof(LoanManagement));
         }
-
-        loan.InterestRate = model.InterestRate;
 
         TempData["SuccessMessage"] = "Tasa de interés actualizada y cuotas futuras recalculadas correctamente.";
         return RedirectToAction(nameof(LoanManagement));
@@ -456,64 +582,66 @@ public class AdminController : Controller
     };
 
     [HttpGet]
-    public IActionResult CreditCardManagement(string statusFilter = "Activas", string searchCedula = "", int page = 1)
+    public async Task<IActionResult> CreditCardManagement(string statusFilter = "Activas", string searchCedula = "", int page = 1)
     {
-        var query = _dummyCards.AsQueryable();
-
-        if (statusFilter == "Activas") query = query.Where(c => c.Status == "Activa");
-        else if (statusFilter == "Canceladas") query = query.Where(c => c.Status == "Cancelada");
-
-        if (!string.IsNullOrEmpty(searchCedula))
-        {
-            query = query.Where(c => c.ClientCedula.Contains(searchCedula));
-            if (!query.Any()) ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene tarjetas registradas.";
-        }
-
-        query = query.OrderBy(c => c.Status == "Cancelada" ? 1 : 0).ThenByDescending(c => c.Id);
-
-        var cards = query.ToList();
+        var allCards = await _creditCardService.GetCreditCardsAsync(statusFilter == "Activas" ? "Activa" : (statusFilter == "Canceladas" ? "Cancelada" : null), searchCedula);
+        
+        int pageSize = 20;
+        var paginatedCards = allCards.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        
+        var totalActive = allCards.Count(c => c.Status == "Activa");
+        var totalDebt = allCards.Sum(c => c.Debt);
+        
         var model = new CreditCardListViewModel
         {
-            Cards = cards,
+            Cards = paginatedCards.Select(c => new CreditCardViewModel 
+            {
+                Id = c.Id.ToString(),
+                MaskedNumber = c.MaskedCardNumber,
+                ClientName = c.ClientName,
+                ClientCedula = "", 
+                CreditLimit = c.Limit,
+                ExpirationDate = c.ExpirationDate,
+                DebtAmount = c.Debt,
+                Status = c.Status
+            }).ToList(),
             CurrentFilter = statusFilter,
             SearchCedula = searchCedula,
-            TotalActiveCards = _dummyCards.Count(c => c.Status == "Activa"),
-            TotalAccumulatedDebt = _dummyCards.Sum(c => c.DebtAmount),
+            TotalActiveCards = totalActive,
+            TotalAccumulatedDebt = totalDebt,
             PortfolioRisk = "Bajo",
-            CurrentPage = page, TotalPages = 1, TotalRecords = cards.Count
+            CurrentPage = page, 
+            TotalPages = Math.Max(1, (int)Math.Ceiling(allCards.Count() / (double)pageSize)), 
+            TotalRecords = allCards.Count()
         };
 
         return View(model);
     }
 
-   [HttpGet]
-    public IActionResult AssignCardStep1(string searchCedula = "")
+    [HttpGet]
+    public async Task<IActionResult> AssignCardStep1(string searchCedula = "")
     {
-        var allClients = new List<ClientSelectionViewModel>
-        {
-            new ClientSelectionViewModel { Id = "c1", Cedula = "402-1234567-8", FullName = "Carlos E. Mendoza", Email = "cmendoza@example.com", TotalDebt = 8450.00m },
-            new ClientSelectionViewModel { Id = "c2", Cedula = "001-9876543-2", FullName = "Laura V. Castillo", Email = "lcastillo@example.com", TotalDebt = 0.00m },
-            new ClientSelectionViewModel { Id = "c3", Cedula = "223-4567890-1", FullName = "Roberto Sánchez", Email = "rsanchez_corp@example.com", TotalDebt = 1200.50m },
-            new ClientSelectionViewModel { Id = "c4", Cedula = "031-1122334-4", FullName = "Ana María Rojas", Email = "am_rojas@example.com", TotalDebt = 12300.00m }
-        };
-
-        var query = allClients.AsQueryable();
+        var users = await _userService.GetAllUsersAsync("Cliente");
+        var query = users.AsQueryable();
 
         if (!string.IsNullOrEmpty(searchCedula))
         {
             query = query.Where(c => c.Cedula.Contains(searchCedula));
-            
-            if (!query.Any())
-            {
-                ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula.";
-            }
+            if (!query.Any()) ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula.";
         }
 
         var model = new AssignCardStep1ViewModel
         {
             AverageSystemDebt = 4250.00m,
             SearchCedula = searchCedula,
-            EligibleClients = query.ToList()
+            EligibleClients = query.Select(u => new ClientSelectionViewModel
+            {
+                Id = u.Id.ToString(),
+                Cedula = u.Cedula,
+                FullName = $"{u.FirstName} {u.LastName}",
+                Email = u.Email,
+                TotalDebt = 0m
+            }).ToList()
         };
         
         return View(model);
@@ -532,188 +660,221 @@ public class AdminController : Controller
     }
 
     [HttpGet]
-    public IActionResult AssignCardStep2(string clientId)
+    public async Task<IActionResult> AssignCardStep2(string clientId)
     {
-        var model = new AssignCardStep2ViewModel { ClientId = clientId, ClientName = "Roberto Medina", ClientCedula = "001-1234567-8" };
+        if(!Guid.TryParse(clientId, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var user = await _userService.GetUserByIdAsync(gId);
+        if(user == null) return RedirectToAction(nameof(CreditCardManagement));
+
+        var model = new AssignCardStep2ViewModel { ClientId = clientId, ClientName = $"{user.FirstName} {user.LastName}", ClientCedula = user.Cedula };
         return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignCardStep2(AssignCardStep2ViewModel model)
+    public async Task<IActionResult> AssignCardStep2(AssignCardStep2ViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
         
-        var expDate = DateTime.Now.AddYears(3).ToString("MM/yy");
-        
-        TempData["SuccessMessage"] = $"Tarjeta de crédito asignada exitosamente. Vencimiento: {expDate}. (Correo enviado al cliente)";
-        return RedirectToAction(nameof(CreditCardManagement));
+        var dto = new Application.DTOs.Banking.AssignCreditCardDto
+        {
+            ClientId = Guid.Parse(model.ClientId),
+            Limit = model.CreditLimit
+        };
+
+        var result = await _creditCardService.AssignCreditCardAsync(dto);
+        if(result.Success)
+        {
+            TempData["SuccessMessage"] = $"Tarjeta de crédito asignada exitosamente.";
+            return RedirectToAction(nameof(CreditCardManagement));
+        }
+        else
+        {
+            TempData["ErrorMessage"] = result.Error;
+            return View(model);
+        }
     }
 
     [HttpGet]
-    public IActionResult CreditCardDetails(string id)
+    public async Task<IActionResult> CreditCardDetails(string id)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == id);
+        if(!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var card = await _creditCardService.GetCreditCardByIdAsync(gId);
         if (card == null)
         {
             TempData["ErrorMessage"] = "La tarjeta seleccionada no existe.";
             return RedirectToAction(nameof(CreditCardManagement));
         }
 
+        var txs = await _creditCardService.GetTransactionsAsync(gId);
+
         var model = new CreditCardDetailsViewModel
         {
-            MaskedNumber = card.MaskedNumber,
+            MaskedNumber = card.MaskedCardNumber,
             ClientName = card.ClientName,
             ExpirationDate = card.ExpirationDate,
-            Consumptions = new List<ConsumptionViewModel>
+            Consumptions = txs.Select(t => new ConsumptionViewModel
             {
-                new ConsumptionViewModel { Date = DateTime.Now.AddDays(-2), Commerce = "Apple Store VIRTUAL", Amount = 1299.00m, Status = "APROBADO" },
-                new ConsumptionViewModel { Date = DateTime.Now.AddDays(-4), Commerce = "AVANCE EFECTIVO ATM", Amount = 300.00m, Status = "APROBADO" },
-                new ConsumptionViewModel { Date = DateTime.Now.AddDays(-5), Commerce = "Aerolíneas Argentinas", Amount = 850.50m, Status = "RECHAZADO" }
-            }
+                Date = t.Date,
+                Commerce = t.MerchantName,
+                Amount = t.Amount,
+                Status = t.Status
+            }).ToList()
         };
         return View(model);
     }
 
     [HttpGet]
-    public IActionResult EditCreditCardLimit(string id)
+    public async Task<IActionResult> EditCreditCardLimit(string id)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == id);
+        if(!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var card = await _creditCardService.GetCreditCardByIdAsync(gId);
         if (card == null) { TempData["ErrorMessage"] = "La tarjeta seleccionada no existe."; return RedirectToAction(nameof(CreditCardManagement)); }
         if (card.Status != "Activa") { TempData["ErrorMessage"] = "No se puede modificar una tarjeta cancelada."; return RedirectToAction(nameof(CreditCardManagement)); }
 
-        var model = new EditCreditCardLimitViewModel { Id = card.Id, MaskedNumber = card.MaskedNumber, CurrentDebt = card.DebtAmount, CurrentLimit = card.CreditLimit, NewLimit = card.CreditLimit };
+        var model = new EditCreditCardLimitViewModel { Id = card.Id.ToString(), MaskedNumber = card.MaskedCardNumber, CurrentDebt = card.Debt, CurrentLimit = card.Limit, NewLimit = card.Limit };
         return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult EditCreditCardLimit(EditCreditCardLimitViewModel model)
+    public async Task<IActionResult> EditCreditCardLimit(EditCreditCardLimitViewModel model)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == model.Id);
-        if (card == null)
+        if (!ModelState.IsValid) return View(model);
+        if(!Guid.TryParse(model.Id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+
+        var dto = new Application.DTOs.Banking.UpdateCreditCardLimitDto { NewLimit = model.NewLimit };
+        var result = await _creditCardService.UpdateCreditCardLimitAsync(gId, dto);
+
+        if (result.Success)
         {
-            TempData["ErrorMessage"] = "La tarjeta seleccionada no existe.";
+            TempData["SuccessMessage"] = "Límite actualizado correctamente.";
             return RedirectToAction(nameof(CreditCardManagement));
         }
-
-        if (card.Status != "Activa")
+        else
         {
-            TempData["ErrorMessage"] = "No se puede modificar una tarjeta cancelada.";
-            return RedirectToAction(nameof(CreditCardManagement));
-        }
-
-        if (model.NewLimit < card.DebtAmount)
-        {
-            ModelState.AddModelError("NewLimit", "El límite de la tarjeta no puede ser inferior al monto adeudado actualmente.");
+            TempData["ErrorMessage"] = result.Error;
             return View(model);
         }
-
-        if (!ModelState.IsValid) return View(model);
-
-        card.CreditLimit = model.NewLimit;
-        TempData["SuccessMessage"] = "Límite actualizado correctamente.";
-        return RedirectToAction(nameof(CreditCardManagement));
     }
 
     [HttpGet]
-    public IActionResult CancelCreditCard(string id)
+    public async Task<IActionResult> CancelCreditCard(string id)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == id);
+        if(!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var card = await _creditCardService.GetCreditCardByIdAsync(gId);
         if (card == null)
         {
             TempData["ErrorMessage"] = "La tarjeta seleccionada no existe.";
             return RedirectToAction(nameof(CreditCardManagement));
         }
         
-        return View(new CancelCreditCardViewModel { Id = card.Id, MaskedNumber = card.MaskedNumber.Length >= 4 ? card.MaskedNumber.Substring(card.MaskedNumber.Length - 4) : card.MaskedNumber, CurrentDebt = card.DebtAmount });
+        return View(new CancelCreditCardViewModel { Id = card.Id.ToString(), MaskedNumber = card.MaskedCardNumber, CurrentDebt = card.Debt });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult CancelCreditCardConfirmed(string id)
+    public async Task<IActionResult> CancelCreditCardConfirmed(string id)
     {
-        var card = _dummyCards.FirstOrDefault(c => c.Id == id);
-        if (card == null)
+        if(!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(CreditCardManagement));
+        var result = await _creditCardService.CancelCreditCardAsync(gId);
+        
+        if(result.Success)
         {
-            TempData["ErrorMessage"] = "La tarjeta seleccionada no existe.";
-            return RedirectToAction(nameof(CreditCardManagement));
+            TempData["SuccessMessage"] = "Tarjeta cancelada exitosamente.";
         }
-
-        if (card.DebtAmount > 0)
+        else
         {
-            TempData["ErrorMessage"] = "Para cancelar esta tarjeta, el cliente debe saldar la totalidad de la deuda pendiente.";
-            return RedirectToAction(nameof(CancelCreditCard), new { id });
+            TempData["ErrorMessage"] = result.Error;
         }
-
-        card.Status = "Cancelada";
-        TempData["SuccessMessage"] = "Tarjeta cancelada exitosamente.";
         return RedirectToAction(nameof(CreditCardManagement));
     }
 
     // ACCOUNT MANAGEMENT
 
-    private static List<SavingsAccountViewModel> _dummySavings = new List<SavingsAccountViewModel>
-    {
-        new SavingsAccountViewModel { Id = "1", AccountNumber = "102938475", ClientName = "Carlos Mendoza", ClientCedula = "402-1234567-8", Balance = 15400.50m, AccountType = "Principal", Status = "Activa" },
-        new SavingsAccountViewModel { Id = "2", AccountNumber = "987654321", ClientName = "Carlos Mendoza", ClientCedula = "402-1234567-8", Balance = 2500.00m, AccountType = "Secundaria", Status = "Activa" },
-        new SavingsAccountViewModel { Id = "3", AccountNumber = "564738291", ClientName = "Laura V. Castillo", ClientCedula = "001-9876543-2", Balance = 0.00m, AccountType = "Secundaria", Status = "Cancelada" }
-    };
-
     [HttpGet]
-    public IActionResult SavingsAccountManagement(string statusFilter = "Activas", string typeFilter = "Todas", string searchCedula = "", int page = 1)
+    public async Task<IActionResult> SavingsAccountManagement(string statusFilter = "Activas", string typeFilter = "Todas", string searchCedula = "", int page = 1)
     {
-        var query = _dummySavings.AsQueryable();
-        //FILTERS 
-        if (statusFilter == "Activas") query = query.Where(a => a.Status == "Activa");
-        else if (statusFilter == "Canceladas") query = query.Where(a => a.Status == "Cancelada");
+        var domainStatus = statusFilter == "Activas" ? "Activa" : statusFilter == "Canceladas" ? "Cancelada" : null;
+        var domainType = typeFilter == "Principal" ? "Principal" : typeFilter == "Secundaria" ? "Secundaria" : null;
 
-        if (typeFilter == "Principal") query = query.Where(a => a.AccountType == "Principal");
-        else if (typeFilter == "Secundaria") query = query.Where(a => a.AccountType == "Secundaria");
+        var allAccounts = await _savingsAccountAppService.GetSavingsAccountsAsync(domainStatus, domainType, searchCedula);
+        
+        var query = allAccounts.AsQueryable();
 
-        if (!string.IsNullOrEmpty(searchCedula))
+        if (!string.IsNullOrEmpty(searchCedula) && !query.Any())
         {
-            query = query.Where(a => a.ClientCedula.Contains(searchCedula));
-            if (!query.Any()) ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene cuentas de ahorro registradas.";
+            ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula o este cliente no tiene cuentas de ahorro registradas.";
         }
 
-        query = query.OrderBy(a => a.Status == "Cancelada" ? 1 : 0).ThenByDescending(a => a.Id);
+        query = query.OrderBy(a => a.Status.ToString() == "Cancelada" ? 1 : 0).ThenByDescending(a => a.CreatedAt);
 
-        var accounts = query.ToList();
+        const int pageSize = 20;
+        var totalRecords = query.Count();
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalRecords / (double)pageSize));
+        var accountsDto = query.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        var accounts = accountsDto.Select(a => new SavingsAccountViewModel
+        {
+            Id = a.Id.ToString(),
+            AccountNumber = a.AccountNumber,
+            ClientName = a.ClientName,
+            ClientCedula = "", // TODO: Map Cedula if needed
+            Balance = a.Balance,
+            AccountType = a.AccountType.ToString(),
+            Status = a.Status.ToString()
+        }).ToList();
+
         var model = new SavingsAccountListViewModel
         {
             Accounts = accounts,
             CurrentStatusFilter = statusFilter,
             CurrentTypeFilter = typeFilter,
             SearchCedula = searchCedula,
-            CurrentPage = page, TotalPages = 1, TotalRecords = accounts.Count
+            CurrentPage = page, TotalPages = totalPages, TotalRecords = totalRecords
         };
 
         return View(model);
     }
 
     [HttpGet]
-    public IActionResult AssignSavingsAccountStep1(string searchCedula = "")
+    public async Task<IActionResult> AssignSavingsAccountStep1(string searchCedula = "")
     {
-        var allClients = new List<ClientSelectionViewModel>
-        {
-            new ClientSelectionViewModel { Id = "c1", Cedula = "402-1234567-8", FullName = "Carlos E. Mendoza", Email = "cmendoza@example.com", TotalDebt = 8450.00m },
-            new ClientSelectionViewModel { Id = "c2", Cedula = "001-9876543-2", FullName = "Laura V. Castillo", Email = "lcastillo@example.com", TotalDebt = 0.00m }
-        };
+        var allClients = await _userManager.GetUsersInRoleAsync("Cliente");
+        var activeClients = allClients.Where(c => c.IsActive).ToList();
 
-        var query = allClients.AsQueryable();
-        if (!string.IsNullOrEmpty(searchCedula))
+        if (!string.IsNullOrWhiteSpace(searchCedula))
         {
-            query = query.Where(c => c.Cedula.Contains(searchCedula));
-            if (!query.Any()) ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula.";
+            var cleanSearch = searchCedula.Trim().Replace("-", "");
+            activeClients = activeClients.Where(c => 
+                c.Cedula.Contains(searchCedula.Trim(), StringComparison.OrdinalIgnoreCase) || 
+                c.Cedula.Replace("-", "").Contains(cleanSearch, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
-        return View(new AssignSavingsAccountStep1ViewModel { SearchCedula = searchCedula, EligibleClients = query.ToList() });
+        var eligibleClients = new List<ClientSelectionViewModel>();
+        foreach (var c in activeClients)
+        {
+            eligibleClients.Add(new ClientSelectionViewModel
+            {
+                Id = c.Id.ToString(),
+                Cedula = c.Cedula,
+                FullName = $"{c.FirstName} {c.LastName}",
+                Email = c.Email ?? string.Empty,
+                TotalDebt = 0 
+            });
+        }
+
+        if (!string.IsNullOrEmpty(searchCedula) && !eligibleClients.Any())
+        {
+            ViewBag.SearchMessage = "No existe un cliente registrado con esta cédula.";
+        }
+
+        return View(new AssignSavingsAccountStep1ViewModel { SearchCedula = searchCedula, EligibleClients = eligibleClients });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignSavingsAccountStep1(AssignSavingsAccountStep1ViewModel model)
+    public async Task<IActionResult> AssignSavingsAccountStep1(AssignSavingsAccountStep1ViewModel model)
     {
         if (string.IsNullOrEmpty(model.SelectedClientId))
         {
@@ -721,8 +882,15 @@ public class AdminController : Controller
             return RedirectToAction(nameof(AssignSavingsAccountStep1));
         }
 
-        //simulation 
-        bool hasPrincipalAccount = true;
+        if (!Guid.TryParse(model.SelectedClientId, out var clientGuid))
+        {
+            TempData["ErrorMessage"] = "ID de cliente inválido.";
+            return RedirectToAction(nameof(AssignSavingsAccountStep1));
+        }
+
+        var clientAccounts = await _savingsAccountAppService.GetSavingsAccountsAsync();
+        var hasPrincipalAccount = clientAccounts.Any(a => a.ClientId == clientGuid && a.AccountType == "Principal" && a.Status == "Activa");
+
         if (!hasPrincipalAccount)
         {
             TempData["ErrorMessage"] = "El cliente debe tener una cuenta de ahorro principal activa antes de asignarle una cuenta secundaria.";
@@ -733,31 +901,55 @@ public class AdminController : Controller
     }
 
     [HttpGet]
-    public IActionResult AssignSavingsAccountStep2(string clientId)
+    public async Task<IActionResult> AssignSavingsAccountStep2(string clientId)
     {
-        var model = new AssignSavingsAccountStep2ViewModel { ClientId = clientId, ClientName = "Carlos E. Mendoza", ClientCedula = "402-1234567-8" };
+        if (!Guid.TryParse(clientId, out var gId)) return RedirectToAction(nameof(AssignSavingsAccountStep1));
+        var client = await _userManager.FindByIdAsync(clientId);
+        if (client == null) return RedirectToAction(nameof(AssignSavingsAccountStep1));
+
+        var model = new AssignSavingsAccountStep2ViewModel 
+        { 
+            ClientId = clientId, 
+            ClientName = $"{client.FirstName} {client.LastName}", 
+            ClientCedula = client.Cedula 
+        };
         return View(model);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult AssignSavingsAccountStep2(AssignSavingsAccountStep2ViewModel model)
+    public async Task<IActionResult> AssignSavingsAccountStep2(AssignSavingsAccountStep2ViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
         
+        var dto = new CreateSavingsAccountDto 
+        { 
+            ClientId = Guid.Parse(model.ClientId), 
+            InitialBalance = model.InitialBalance 
+        };
+        var result = await _savingsAccountAppService.CreateSavingsAccountAsync(dto);
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error;
+            return View(model);
+        }
+
         TempData["SuccessMessage"] = $"Cuenta de ahorro secundaria asignada correctamente.{(model.InitialBalance > 0 ? " Transacción de CRÉDITO inicial registrada." : "")}";
         return RedirectToAction(nameof(SavingsAccountManagement));
     }
 
     [HttpGet]
-    public IActionResult SavingsAccountDetails(string id)
+    public async Task<IActionResult> SavingsAccountDetails(string id)
     {
-        var account = _dummySavings.FirstOrDefault(a => a.Id == id);
+        if (!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(SavingsAccountManagement));
+        var account = await _savingsAccountAppService.GetSavingsAccountByIdAsync(gId);
         if (account == null)
         {
             TempData["ErrorMessage"] = "La cuenta seleccionada no existe.";
             return RedirectToAction(nameof(SavingsAccountManagement));
         }
+
+        var txs = await _savingsAccountAppService.GetTransactionsAsync(gId);
 
         var model = new SavingsAccountDetailsViewModel
         {
@@ -765,31 +957,38 @@ public class AdminController : Controller
             ClientName = account.ClientName,
             CurrentBalance = account.Balance,
             AccountType = account.AccountType,
-            Transactions = new List<TransactionViewModel>
+            Transactions = txs.OrderByDescending(t => t.Date).Select(t => new TransactionViewModel
             {
-                new TransactionViewModel { Date = DateTime.Now.AddDays(-1), Amount = 500.00m, Type = "CRÉDITO", Beneficiary = account.AccountNumber, Origin = "DEPÓSITO", Status = "APROBADA" },
-                new TransactionViewModel { Date = DateTime.Now.AddDays(-3), Amount = 1200.00m, Type = "DÉBITO", Beneficiary = "RETIRO", Origin = account.AccountNumber, Status = "APROBADA" },
-                new TransactionViewModel { Date = DateTime.Now.AddDays(-5), Amount = 5000.00m, Type = "DÉBITO", Beneficiary = "8924", Origin = account.AccountNumber, Status = "RECHAZADA" }
-            }
+                Date = t.Date,
+                Amount = t.Amount,
+                Type = t.Type,
+                Beneficiary = t.Beneficiary,
+                Origin = t.Origin,
+                Status = t.Status
+            }).ToList()
         };
         return View(model);
     }
 
     [HttpGet]
-    public IActionResult CancelSavingsAccount(string id)
+    public async Task<IActionResult> CancelSavingsAccount(string id)
     {
-        var account = _dummySavings.FirstOrDefault(a => a.Id == id);
+        if (!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(SavingsAccountManagement));
+        var account = await _savingsAccountAppService.GetSavingsAccountByIdAsync(gId);
+        
         if (account == null) { TempData["ErrorMessage"] = "La cuenta seleccionada no existe."; return RedirectToAction(nameof(SavingsAccountManagement)); }
         if (account.AccountType == "Principal") { TempData["ErrorMessage"] = "Las cuentas principales no pueden ser canceladas."; return RedirectToAction(nameof(SavingsAccountManagement)); }
         
-        return View(new CancelSavingsAccountViewModel { Id = account.Id, AccountNumber = account.AccountNumber, CurrentBalance = account.Balance });
+        return View(new CancelSavingsAccountViewModel { Id = account.Id.ToString(), AccountNumber = account.AccountNumber, CurrentBalance = account.Balance });
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult CancelSavingsAccountConfirmed(string id)
+    public async Task<IActionResult> CancelSavingsAccountConfirmed(string id)
     {
-        var account = _dummySavings.FirstOrDefault(a => a.Id == id);
+        if (!Guid.TryParse(id, out var gId)) return RedirectToAction(nameof(SavingsAccountManagement));
+        
+        var account = await _savingsAccountAppService.GetSavingsAccountByIdAsync(gId);
         if (account == null)
         {
             TempData["ErrorMessage"] = "La cuenta seleccionada no existe.";
@@ -802,15 +1001,23 @@ public class AdminController : Controller
             return RedirectToAction(nameof(SavingsAccountManagement));
         }
 
-        account.Status = "Cancelada";
+        decimal balance = account.Balance;
+        var result = await _savingsAccountAppService.CancelSavingsAccountAsync(gId);
         
-        if (account.Balance > 0)
+        if (result.Success)
         {
-            TempData["SuccessMessage"] = $"Cuenta secundaria cancelada exitosamente. El balance de {account.Balance:C} fue transferido a la cuenta principal del cliente.";
+            if (balance > 0)
+            {
+                TempData["SuccessMessage"] = $"Cuenta secundaria cancelada exitosamente. El balance de {balance:C} fue transferido a la cuenta principal del cliente.";
+            }
+            else
+            {
+                TempData["SuccessMessage"] = "Cuenta secundaria cancelada exitosamente.";
+            }
         }
         else
         {
-            TempData["SuccessMessage"] = "Cuenta secundaria cancelada exitosamente.";
+            TempData["ErrorMessage"] = result.Error;
         }
 
         return RedirectToAction(nameof(SavingsAccountManagement));

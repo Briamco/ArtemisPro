@@ -20,10 +20,8 @@ public class AutoMapperProfile : Profile
 
         CreateMap<Loan, LoanDto>()
             .ForMember(dest => dest.ClientName, opt => opt.MapFrom(src => $"{src.Client.FirstName} {src.Client.LastName}"))
-            .ForMember(dest => dest.TotalInstallments, opt => opt.MapFrom(src => src.Installments.Count))
-            .ForMember(dest => dest.PaidInstallments, opt => opt.MapFrom(src => src.Installments.Count(i => i.PaymentStatus == Domain.Enums.PaymentStatus.Pagada)))
-            .ForMember(dest => dest.PendingAmount, opt => opt.Ignore())
-            .ForMember(dest => dest.ClientStatus, opt => opt.Ignore());
+            .ForMember(dest => dest.PendingAmount, opt => opt.MapFrom(src => src.Installments.Where(i => i.PaymentStatus != Domain.Enums.PaymentStatus.Pagada).Sum(i => i.Amount)))
+            .ForMember(dest => dest.ClientStatus, opt => opt.MapFrom(src => src.Installments.Any(i => i.IsOverdue) ? "En mora" : "Al día"));
 
         CreateMap<LoanInstallment, LoanInstallmentDto>();
 
