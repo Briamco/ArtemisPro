@@ -15,15 +15,18 @@ public class BeneficiaryAppService : IBeneficiaryAppService
 {
     private readonly IBeneficiaryRepository _beneficiaryRepository;
     private readonly ISavingsAccountRepository _savingsAccountRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
 
     public BeneficiaryAppService(
         IBeneficiaryRepository beneficiaryRepository,
         ISavingsAccountRepository savingsAccountRepository,
+        IUnitOfWork unitOfWork,
         IMapper mapper)
     {
         _beneficiaryRepository = beneficiaryRepository;
         _savingsAccountRepository = savingsAccountRepository;
+        _unitOfWork = unitOfWork;
         _mapper = mapper;
     }
 
@@ -84,6 +87,7 @@ public class BeneficiaryAppService : IBeneficiaryAppService
         };
 
         await _beneficiaryRepository.AddAsync(beneficiary);
+        await _unitOfWork.SaveChangesAsync();
         return (true, null);
     }
 
@@ -95,7 +99,8 @@ public class BeneficiaryAppService : IBeneficiaryAppService
             return (false, "Beneficiario no encontrado.");
         }
 
-        await _beneficiaryRepository.DeleteAsync(beneficiary);
+        _beneficiaryRepository.Delete(beneficiary);
+        await _unitOfWork.SaveChangesAsync();
         return (true, null);
     }
 }
