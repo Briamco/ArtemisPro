@@ -13,4 +13,5 @@ public interface ICreditCardAppService
     Task<(bool Success, string? Error)> AssignCreditCardAsync(AssignCreditCardDto dto);
     Task<(bool Success, string? Error)> UpdateCreditCardLimitAsync(Guid id, UpdateCreditCardLimitDto dto);
     Task<(bool Success, string? Error)> CancelCreditCardAsync(Guid id);
+    Task<(bool Success, string? Error)> PayCreditCardAsync(PayCreditCardDto dto);
 }
