@@ -23,6 +23,10 @@ public class PaymentAppService : IPaymentAppService
 
     public async Task<(bool Success, string? Error)> PayCreditCardAsync(PayCreditCardDto dto)
     {
+        if (dto.Amount <= 0) return (false, "El monto a pagar debe ser mayor que cero.");
+        if (dto.SourceAccountId == Guid.Empty || dto.CreditCardId == Guid.Empty || dto.ClientId == Guid.Empty)
+            return (false, "Identificadores inválidos para procesar el pago.");
+
         var sourceAccount = await _unitOfWork.SavingsAccounts.GetByIdAsync(dto.SourceAccountId);
         if (sourceAccount == null) return (false, "La cuenta de origen no existe.");
         if (sourceAccount.ClientId != dto.ClientId) return (false, "La cuenta de origen no pertenece al cliente.");
@@ -122,6 +126,10 @@ public class PaymentAppService : IPaymentAppService
 
     public async Task<(bool Success, string? Error)> PayLoanAsync(PayLoanDto dto)
     {
+        if (dto.Amount <= 0) return (false, "El monto a pagar debe ser mayor que cero.");
+        if (dto.SourceAccountId == Guid.Empty || dto.LoanId == Guid.Empty || dto.ClientId == Guid.Empty)
+            return (false, "Identificadores inválidos para procesar el pago.");
+
         var sourceAccount = await _unitOfWork.SavingsAccounts.GetByIdAsync(dto.SourceAccountId);
         if (sourceAccount == null) return (false, "La cuenta de origen no existe.");
         if (sourceAccount.ClientId != dto.ClientId) return (false, "La cuenta de origen no pertenece al cliente.");
