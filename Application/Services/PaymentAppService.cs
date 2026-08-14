@@ -48,8 +48,8 @@ public class PaymentAppService : IPaymentAppService
             {
                 SavingsAccountId = sourceAccount.Id,
                 Amount = paymentAmount,
-                Type = TransactionType.Debito,
-                Status = TransactionStatus.Rechazada,
+                Type = TransactionType.DÉBITO,
+                Status = TransactionStatus.RECHAZADA,
                 Beneficiary = cardLast4,
                 Origin = sourceAccount.AccountNumber,
                 Date = DateTime.UtcNow
@@ -71,8 +71,8 @@ public class PaymentAppService : IPaymentAppService
             {
                 SavingsAccountId = sourceAccount.Id,
                 Amount = paymentAmount,
-                Type = TransactionType.Debito,
-                Status = TransactionStatus.Aprobada,
+                Type = TransactionType.DÉBITO,
+                Status = TransactionStatus.APROBADA,
                 Beneficiary = cardLast4,
                 Origin = sourceAccount.AccountNumber,
                 Date = transactionDate
@@ -155,8 +155,8 @@ public class PaymentAppService : IPaymentAppService
             {
                 SavingsAccountId = sourceAccount.Id,
                 Amount = paymentAmount,
-                Type = TransactionType.Debito,
-                Status = TransactionStatus.Rechazada,
+                Type = TransactionType.DÉBITO,
+                Status = TransactionStatus.RECHAZADA,
                 Beneficiary = loan.LoanNumber,
                 Origin = sourceAccount.AccountNumber,
                 Date = DateTime.UtcNow
@@ -176,8 +176,8 @@ public class PaymentAppService : IPaymentAppService
             {
                 SavingsAccountId = sourceAccount.Id,
                 Amount = paymentAmount,
-                Type = TransactionType.Debito,
-                Status = TransactionStatus.Aprobada,
+                Type = TransactionType.DÉBITO,
+                Status = TransactionStatus.APROBADA,
                 Beneficiary = loan.LoanNumber,
                 Origin = sourceAccount.AccountNumber,
                 Date = transactionDate

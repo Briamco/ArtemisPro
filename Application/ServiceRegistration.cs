@@ -20,6 +20,7 @@ public static class ServiceRegistration
         services.AddScoped<ITransferAppService, Application.Services.Banking.TransferAppService>();
         services.AddScoped<IDepositAppService, Application.Services.Banking.DepositAppService>();
         services.AddScoped<IWithdrawalAppService, Application.Services.Banking.WithdrawalAppService>();
+        services.AddScoped<ICardPaymentAppService, Application.Services.Banking.CardPaymentAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
         return services;
     }
