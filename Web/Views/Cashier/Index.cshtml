@@ -1,0 +1,91 @@
+@model Application.Models.ViewModels.Cashier.CashierHomeViewModel
+@{
+    ViewData["Title"] = "Home Cajero";
+    Layout = "~/Views/Shared/_LayoutCashier.cshtml";
+}
+
+<style>
+    .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-top: 20px;}
+    .indicator-card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; display: flex; align-items: center; gap: 20px; transition: transform 0.2s ease; }
+    .indicator-card:hover { transform: translateY(-5px); border-color: rgba(0, 229, 255, 0.3); }
+    .indicator-icon { width: 60px; height: 60px; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .indicator-title { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; font-weight: 600; }
+    .indicator-value { font-size: 2.2rem; font-weight: 700; color: white; line-height: 1; }
+</style>
+
+<div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px;">
+        <div>
+            <h1 style="font-weight: 700; font-size: 2.2rem; margin-bottom: 5px;">Bienvenido al Panel de Caja!</h1>
+            <p style="color: var(--text-muted);">Resumen de las operaciones procesadas en el día actual.</p>
+        </div>
+        <div style="background-color: rgba(255,255,255,0.05); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; color: var(--text-muted); font-weight: 600; display: flex; align-items: center; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            @DateTime.Now.ToString("dd 'de' MMMM, yyyy", new System.Globalization.CultureInfo("es-ES"))
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success" style="background-color: rgba(0, 229, 255, 0.1); border: 1px solid var(--cyan-accent); color: var(--cyan-accent); border-radius: 8px; padding: 15px; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; font-weight: 600;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            @TempData["SuccessMessage"]
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger" style="background-color: rgba(255, 107, 107, 0.1); border: 1px solid #FF6B6B; color: #FF6B6B; border-radius: 8px; padding: 15px; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; font-weight: 600;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+            @TempData["ErrorMessage"]
+        </div>
+    }
+
+    <div class="dashboard-grid">
+        
+        <!-- total transactions -->
+        <div class="indicator-card">
+            <div class="indicator-icon" style="background-color: rgba(0, 229, 255, 0.1); color: var(--cyan-accent);">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            </div>
+            <div>
+                <div class="indicator-title">Transacciones realizadas hoy</div>
+                <div class="indicator-value">@Model.TotalTransactionsToday</div>
+            </div>
+        </div>
+
+        <!-- deposits -->
+        <div class="indicator-card">
+            <div class="indicator-icon" style="background-color: rgba(74, 144, 226, 0.1); color: #4A90E2;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+            </div>
+            <div>
+                <div class="indicator-title">Depósitos realizados hoy</div>
+                <div class="indicator-value">@Model.TotalDepositsToday</div>
+            </div>
+        </div>
+
+        <!-- withdrawal -->
+        <div class="indicator-card">
+            <div class="indicator-icon" style="background-color: rgba(255, 107, 107, 0.1); color: #FF6B6B;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+            </div>
+            <div>
+                <div class="indicator-title">Retiros realizados hoy</div>
+                <div class="indicator-value">@Model.TotalWithdrawalsToday</div>
+            </div>
+        </div>
+
+        <!-- Pays -->
+        <div class="indicator-card">
+            <div class="indicator-icon" style="background-color: rgba(255, 171, 0, 0.1); color: #FFAB00;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </div>
+            <div>
+                <div class="indicator-title">Pagos realizados hoy</div>
+                <div class="indicator-value">@Model.TotalPaymentsToday</div>
+            </div>
+        </div>
+
+    </div>
+</div>

@@ -1,5 +1,6 @@
 using Application.Models.ViewModels.Client;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Web.Controllers;
 
