@@ -89,7 +89,7 @@ public class CashierController : Controller
             return RedirectToAction(nameof(Deposit));
         }
 
-        TempData["SuccessMessage"] = "El depósito fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
+        TempData["SuccessMessage"] = "El depósito fue realizado correctamente.";
         return RedirectToAction("Index"); 
     }
 
@@ -144,7 +144,7 @@ public class CashierController : Controller
             return RedirectToAction(nameof(Withdrawal));
         }
 
-        TempData["SuccessMessage"] = "El retiro fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
+        TempData["SuccessMessage"] = "El retiro fue realizado correctamente.";
         return RedirectToAction("Index"); 
     }
 
@@ -196,6 +196,7 @@ public class CashierController : Controller
             SourceAccountOwner = $"{account.FirstName} {account.LastName}",
             SourceAccountNumber = account.AccountNumber,
             CreditCardOwner = $"{card.FirstName} {card.LastName}",
+            CreditCardNumber = card.CardNumber,
             CreditCardMasked = $"**** {card.CardNumber.Substring(12)}",
             EnteredAmount = model.Amount,
             EffectiveAmount = effectiveAmount
@@ -211,7 +212,7 @@ public class CashierController : Controller
         if (!ModelState.IsValid) return RedirectToAction(nameof(PayCreditCard));
 
         var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var card = _systemCards.FirstOrDefault(c => model.CreditCardMasked.EndsWith(c.CardNumber.Substring(Math.Max(0, c.CardNumber.Length - 4))));
+        var card = _systemCards.FirstOrDefault(c => c.CardNumber == model.CreditCardNumber);
 
         if (account == null || account.Status != "Activa" || card == null || card.Status != "Activa" || card.Debt <= 0)
         {
@@ -226,7 +227,7 @@ public class CashierController : Controller
             return RedirectToAction(nameof(PayCreditCard));
         }
 
-        TempData["SuccessMessage"] = "El pago fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
+        TempData["SuccessMessage"] = "El pago fue realizado correctamente.";
         return RedirectToAction("Index"); 
     }
 
@@ -308,7 +309,7 @@ public class CashierController : Controller
             return RedirectToAction(nameof(PayLoan));
         }
 
-        TempData["SuccessMessage"] = "El pago fue realizado correctamente, pero no fue posible enviar el correo de notificación.";   
+        TempData["SuccessMessage"] = "El pago fue realizado correctamente.";   
         return RedirectToAction("Index"); 
     }
 
@@ -383,7 +384,7 @@ public class CashierController : Controller
             return RedirectToAction(nameof(ThirdPartyTransfer));
         }
 
-        TempData["SuccessMessage"] = "La transacción fue realizada correctamente, pero no fue posible enviar una o más notificaciones por correo.";
+        TempData["SuccessMessage"] = "La transacción fue realizada correctamente.";
         return RedirectToAction("Index"); 
     }
 }

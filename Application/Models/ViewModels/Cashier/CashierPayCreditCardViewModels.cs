@@ -31,6 +31,9 @@ public class ConfirmPayCreditCardViewModel
     public string CreditCardOwner { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El número de tarjeta es requerido.")]
+    public string CreditCardNumber { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "El número de tarjeta es requerido.")]
     public string CreditCardMasked { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El monto ingresado es requerido.")]

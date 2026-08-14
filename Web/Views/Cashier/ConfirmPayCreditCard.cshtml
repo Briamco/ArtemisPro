@@ -55,6 +55,7 @@
         <form asp-action="ExecutePayCreditCard" method="post" class="d-flex justify-content-center gap-3" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
             <input type="hidden" asp-for="SourceAccountNumber" />
             <input type="hidden" asp-for="SourceAccountOwner" />
+            <input type="hidden" asp-for="CreditCardNumber" />
             <input type="hidden" asp-for="CreditCardMasked" />
             <input type="hidden" asp-for="CreditCardOwner" />
             <input type="hidden" asp-for="EnteredAmount" />
