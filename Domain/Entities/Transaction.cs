@@ -13,6 +13,8 @@ public class Transaction : BaseEntity
     public string Origin { get; set; } = string.Empty;
     public TransactionStatus Status { get; set; }
     public DateTime Date { get; set; }
+    public Guid? PerformedById { get; set; }
 
     public SavingsAccount SavingsAccount { get; set; } = null!;
+    public ApplicationUser? PerformedBy { get; set; }
 }

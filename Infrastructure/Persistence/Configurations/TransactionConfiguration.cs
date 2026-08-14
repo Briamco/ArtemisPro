@@ -33,5 +33,10 @@ public class TransactionConfiguration : IEntityTypeConfiguration<Transaction>
             .WithMany()
             .HasForeignKey(t => t.SavingsAccountId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(t => t.PerformedBy)
+            .WithMany()
+            .HasForeignKey(t => t.PerformedById)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
