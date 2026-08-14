@@ -2,6 +2,6 @@ namespace Domain.Enums;
 
 public enum TransactionType
 {
-    Debito,
-    Credito
+    DÉBITO,
+    CRÉDITO
 }

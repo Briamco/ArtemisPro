@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -55,38 +55,38 @@ public class TransferAppService : ITransferAppService
         var destination = await _unitOfWork.SavingsAccounts.GetByIdAsync(dto.DestinationAccountId);
         if (destination == null)
         {
-            return await RejectAsync(origin, string.Empty, dto.Amount, "La cuenta de destino seleccionada no existe.");
+            return await RejectAsync(origin, string.Empty, dto.Amount, clientId, "La cuenta de destino seleccionada no existe.");
         }
 
         if (destination.ClientId != clientId)
         {
-            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, "La cuenta de destino debe pertenecer al cliente autenticado.");
+            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, clientId, "La cuenta de destino debe pertenecer al cliente autenticado.");
         }
 
         if (destination.Status != AccountStatus.Activa)
         {
-            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, "La cuenta de destino debe estar activa.");
+            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, clientId, "La cuenta de destino debe estar activa.");
         }
 
         if (dto.Amount <= 0)
         {
-            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, "El monto a transferir debe ser mayor que cero.");
+            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, clientId, "El monto a transferir debe ser mayor que cero.");
         }
 
         if (origin.Id == destination.Id)
         {
-            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, "La cuenta de origen y la cuenta de destino no pueden ser la misma.");
+            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, clientId, "La cuenta de origen y la cuenta de destino no pueden ser la misma.");
         }
 
         var activeAccounts = await _unitOfWork.SavingsAccounts.GetByClientIdAsync(clientId);
         if (activeAccounts.Count(a => a.Status == AccountStatus.Activa) < 2)
         {
-            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, "Debe tener al menos dos cuentas de ahorro activas para realizar una transferencia entre cuentas.");
+            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, clientId, "Debe tener al menos dos cuentas de ahorro activas para realizar una transferencia entre cuentas.");
         }
 
         if (origin.Balance < dto.Amount)
         {
-            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, "No dispone del monto requerido en la cuenta seleccionada.");
+            return await RejectAsync(origin, destination.AccountNumber, dto.Amount, clientId, "No dispone del monto requerido en la cuenta seleccionada.");
         }
 
         await _unitOfWork.BeginTransactionAsync();
@@ -101,10 +101,10 @@ public class TransferAppService : ITransferAppService
             {
                 SavingsAccountId = origin.Id,
                 Amount = dto.Amount,
-                Type = TransactionType.Debito,
+                Type = TransactionType.DÉBITO,
                 Beneficiary = destination.AccountNumber,
                 Origin = origin.AccountNumber,
-                Status = TransactionStatus.Aprobada,
+                Status = TransactionStatus.APROBADA,
                 Date = DateTime.UtcNow
             };
             await _unitOfWork.Transactions.AddAsync(debitTransaction);
@@ -113,10 +113,10 @@ public class TransferAppService : ITransferAppService
             {
                 SavingsAccountId = destination.Id,
                 Amount = dto.Amount,
-                Type = TransactionType.Credito,
+                Type = TransactionType.CRÉDITO,
                 Beneficiary = destination.AccountNumber,
                 Origin = origin.AccountNumber,
-                Status = TransactionStatus.Aprobada,
+                Status = TransactionStatus.APROBADA,
                 Date = DateTime.UtcNow
             };
             await _unitOfWork.Transactions.AddAsync(creditTransaction);
@@ -136,23 +136,24 @@ public class TransferAppService : ITransferAppService
         return new TransferResult { Success = true, EmailSent = emailSent };
     }
 
-    private async Task<TransferResult> RejectAsync(SavingsAccount origin, string beneficiaryAccountNumber, decimal amount, string error)
+    private async Task<TransferResult> RejectAsync(SavingsAccount origin, string beneficiaryAccountNumber, decimal amount, Guid clientId, string error)
     {
-        await RecordRejectedAttemptAsync(origin, beneficiaryAccountNumber, amount);
+        await RecordRejectedAttemptAsync(origin, beneficiaryAccountNumber, amount, clientId);
         return Failed(error);
     }
 
-    private async Task RecordRejectedAttemptAsync(SavingsAccount origin, string beneficiaryAccountNumber, decimal amount)
+    private async Task RecordRejectedAttemptAsync(SavingsAccount origin, string beneficiaryAccountNumber, decimal amount, Guid clientId)
     {
         var rejected = new Transaction
         {
             SavingsAccountId = origin.Id,
             Amount = amount,
-            Type = TransactionType.Debito,
+            Type = TransactionType.DÉBITO,
             Beneficiary = beneficiaryAccountNumber,
             Origin = origin.AccountNumber,
-            Status = TransactionStatus.Rechazada,
-            Date = DateTime.UtcNow
+            Status = TransactionStatus.RECHAZADA,
+            Date = DateTime.UtcNow,
+            PerformedById = clientId
         };
 
         await _unitOfWork.Transactions.AddAsync(rejected);

@@ -106,10 +106,10 @@ public class SavingsAccountAppService : ISavingsAccountAppService
                 {
                     SavingsAccountId = newAccount.Id,
                     Amount = dto.InitialBalance,
-                    Type = TransactionType.Credito,
+                    Type = TransactionType.CRÉDITO,
                     Beneficiary = $"{user.FirstName} {user.LastName}",
                     Origin = "Apertura de cuenta",
-                    Status = TransactionStatus.Aprobada,
+                    Status = TransactionStatus.APROBADA,
                     Date = DateTime.UtcNow
                 };
                 await _unitOfWork.Transactions.AddAsync(transaction);
@@ -159,10 +159,10 @@ public class SavingsAccountAppService : ISavingsAccountAppService
                 {
                     SavingsAccountId = account.Id,
                     Amount = transferAmount,
-                    Type = TransactionType.Debito,
+                    Type = TransactionType.DÉBITO,
                     Beneficiary = primaryAccount.AccountNumber,
                     Origin = "Cancelación de cuenta",
-                    Status = TransactionStatus.Aprobada,
+                    Status = TransactionStatus.APROBADA,
                     Date = DateTime.UtcNow
                 };
                 await _unitOfWork.Transactions.AddAsync(debitTransaction);
@@ -171,10 +171,10 @@ public class SavingsAccountAppService : ISavingsAccountAppService
                 {
                     SavingsAccountId = primaryAccount.Id,
                     Amount = transferAmount,
-                    Type = TransactionType.Credito,
+                    Type = TransactionType.CRÉDITO,
                     Beneficiary = "Transferencia de cuenta cancelada",
                     Origin = account.AccountNumber,
-                    Status = TransactionStatus.Aprobada,
+                    Status = TransactionStatus.APROBADA,
                     Date = DateTime.UtcNow
                 };
                 await _unitOfWork.Transactions.AddAsync(creditTransaction);

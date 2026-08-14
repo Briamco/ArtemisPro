@@ -61,10 +61,10 @@ public class DepositAppService : IDepositAppService
             {
                 SavingsAccountId = account.Id,
                 Amount = dto.Amount,
-                Type = TransactionType.Credito,
+                Type = TransactionType.CRÉDITO,
                 Origin = "DEPÓSITO",
                 Beneficiary = account.AccountNumber,
-                Status = TransactionStatus.Aprobada,
+                Status = TransactionStatus.APROBADA,
                 Date = DateTime.UtcNow,
                 PerformedById = tellerId
             };

@@ -188,8 +188,8 @@ public class LoanAppService : ILoanAppService
             {
                 SavingsAccountId = primaryAccount.Id,
                 Amount = dto.ApprovedAmount,
-                Type = TransactionType.Credito,
-                Status = TransactionStatus.Aprobada,
+                Type = TransactionType.CRÉDITO,
+                Status = TransactionStatus.APROBADA,
                 Date = DateTime.UtcNow,
                 Origin = "Desembolso de Préstamo",
                 Beneficiary = $"{client.FirstName} {client.LastName}"
