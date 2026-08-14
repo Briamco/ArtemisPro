@@ -17,6 +17,7 @@ public static class ServiceRegistration
         services.AddScoped<IPaymentAppService, PaymentAppService>();
         services.AddScoped<ICreditCardAppService, CreditCardAppService>();
         services.AddScoped<IBeneficiaryAppService, Application.Services.Banking.BeneficiaryAppService>();
+        services.AddScoped<ITransferAppService, Application.Services.Banking.TransferAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
         return services;
     }
