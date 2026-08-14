@@ -125,10 +125,10 @@ public class UserAppService : IUserAppService
                         {
                             SavingsAccountId = account.Id,
                             Amount = dto.InitialBalance,
-                            Type = TransactionType.Credito,
+                            Type = TransactionType.CRÉDITO,
                             Beneficiary = $"{dto.FirstName} {dto.LastName}",
                             Origin = "Apertura de cuenta",
-                            Status = TransactionStatus.Aprobada,
+                            Status = TransactionStatus.APROBADA,
                             Date = DateTime.UtcNow
                         };
                         await _unitOfWork.Transactions.AddAsync(transaction);
@@ -206,10 +206,10 @@ public class UserAppService : IUserAppService
                 {
                     SavingsAccountId = mainAccount.Id,
                     Amount = dto.AdditionalAmount,
-                    Type = TransactionType.Credito,
+                    Type = TransactionType.CRÉDITO,
                     Beneficiary = $"{user.FirstName} {user.LastName}",
                     Origin = "Abono adicional",
-                    Status = TransactionStatus.Aprobada,
+                    Status = TransactionStatus.APROBADA,
                     Date = DateTime.UtcNow
                 };
                 await _unitOfWork.Transactions.AddAsync(transaction);
