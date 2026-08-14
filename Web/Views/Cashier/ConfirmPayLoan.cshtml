@@ -1,0 +1,67 @@
+@model Application.Models.ViewModels.Cashier.ConfirmPayLoanViewModel
+@{ 
+    ViewData["Title"] = "Confirmar Pago a Préstamo"; 
+    Layout = "~/Views/Shared/_LayoutCashier.cshtml"; 
+}
+
+<div style="display: flex; align-items: center; justify-content: center; height: 100%; padding: 20px 0;">
+    <div style="background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 40px; text-align: center; max-width: 500px; width: 100%;">
+        
+        <div style="width: 70px; height: 70px; background-color: rgba(255, 171, 0, 0.1); border: 2px solid #FFAB00; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #FFAB00;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        </div>
+        
+        <h2 style="color: white; font-weight: 700; margin-bottom: 10px;">Confirmar Pago</h2>
+        <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 25px;">¿Está seguro que desea realizar este pago?</p>
+        
+        <div style="background-color: #080D17; border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-bottom: 30px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Titular cuenta origen</span>
+                <span style="color: white; font-weight: 600;">@Model.SourceAccountOwner</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px dashed var(--border-color); padding-bottom: 15px;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Cuenta origen</span>
+                <span style="color: white; font-family: monospace;">@Model.SourceAccountNumber</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Titular del préstamo</span>
+                <span style="color: white; font-weight: 600;">@Model.LoanOwner</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">Número del préstamo</span>
+                <span style="color: white; font-family: monospace;">@Model.LoanNumber</span>
+            </div>
+            
+            <div style="background-color: rgba(0, 0, 0, 0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">Monto ingresado</span>
+                    <span style="color: white;">@Model.EnteredAmount.ToString("C")</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">Monto efectivo a pagar</span>
+                    <span style="color: #FFAB00; font-weight: 700; font-size: 1.2rem;">@Model.EffectiveAmount.ToString("C")</span>
+                </div>
+            </div>
+            
+            @if(Model.EnteredAmount > Model.EffectiveAmount)
+            {
+                <div style="font-size: 0.75rem; color: #FFAB00; text-align: center;">
+                    *El monto digitado supera la deuda real del préstamo. Se ajustó el monto efectivo para evitar sobrepago.
+                </div>
+            }
+        </div>
+
+        <form asp-action="ExecutePayLoan" method="post" class="d-flex justify-content-center gap-3">
+            <input type="hidden" asp-for="SourceAccountNumber" />
+            <input type="hidden" asp-for="SourceAccountOwner" />
+            <input type="hidden" asp-for="LoanNumber" />
+            <input type="hidden" asp-for="LoanOwner" />
+            <input type="hidden" asp-for="EnteredAmount" />
+            <input type="hidden" asp-for="EffectiveAmount" />
+            
+            <a asp-action="Index" style="flex: 1; background-color: transparent; color: white; border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; font-weight: 600; text-decoration: none;">Cancelar</a>
+            <button type="submit" style="flex: 1; background-color: var(--cyan-accent); color: #000; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">Confirmar</button>
+        </form>
+    </div>
+</div>
