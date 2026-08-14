@@ -48,7 +48,7 @@ public class WithdrawalAppService : IWithdrawalAppService
 
         if (dto.Amount <= 0)
         {
-            return await RejectAsync(account, dto.Amount, tellerId, "El monto a retirar debe ser mayor que cero.");
+            return Failed("El monto a retirar debe ser mayor que cero.");
         }
 
         if (account.Balance < dto.Amount)
@@ -119,7 +119,7 @@ public class WithdrawalAppService : IWithdrawalAppService
                 return false;
             }
 
-            var last4 = account.AccountNumber.Substring(account.AccountNumber.Length - 4);
+            var last4 = GetLast4(account.AccountNumber);
             var subject = $"Retiro realizado desde su cuenta {last4}";
             var body = $"Hola {account.Client.FirstName} {account.Client.LastName},<br><br>" +
                        $"Se ha realizado un retiro desde su cuenta terminada en {last4}.<br><br>" +
@@ -134,6 +134,11 @@ public class WithdrawalAppService : IWithdrawalAppService
         {
             return false;
         }
+    }
+
+    private string GetLast4(string value)
+    {
+        return value.Length >= 4 ? value.Substring(value.Length - 4) : value;
     }
 
     private WithdrawalResult Failed(string error)
