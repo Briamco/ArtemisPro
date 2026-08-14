@@ -1,9 +1,11 @@
+using Application.DTOs.Banking;
 using Application.Models.ViewModels.Cashier;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Web.Controllers;
 
-// [Authorize(Roles = "Cajero")]
+//[Authorize(Roles = "Cajero")]
 public class CashierController : Controller
 {
     [HttpGet]
@@ -78,7 +80,15 @@ public class CashierController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult ExecuteDeposit(ConfirmDepositViewModel model)
     {
-        
+        if (!ModelState.IsValid) return RedirectToAction(nameof(Deposit));
+
+        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.AccountNumber);
+        if (account == null || account.Status != "Activa" || model.Amount <= 0)
+        {
+            TempData["ErrorMessage"] = "No se pudo procesar el depósito. La cuenta ingresada no es válida o el monto es incorrecto.";
+            return RedirectToAction(nameof(Deposit));
+        }
+
         TempData["SuccessMessage"] = "El depósito fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
         return RedirectToAction("Index"); 
     }
@@ -125,6 +135,15 @@ public class CashierController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult ExecuteWithdrawal(ConfirmWithdrawalViewModel model)
     { 
+        if (!ModelState.IsValid) return RedirectToAction(nameof(Withdrawal));
+
+        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.AccountNumber);
+        if (account == null || account.Status != "Activa" || model.Amount <= 0 || account.Balance < model.Amount)
+        {
+            TempData["ErrorMessage"] = "No se pudo procesar el retiro. Verifique el estado de la cuenta y el saldo disponible.";
+            return RedirectToAction(nameof(Withdrawal));
+        }
+
         TempData["SuccessMessage"] = "El retiro fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
         return RedirectToAction("Index"); 
     }
@@ -189,6 +208,24 @@ public class CashierController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult ExecutePayCreditCard(ConfirmPayCreditCardViewModel model)
     {
+        if (!ModelState.IsValid) return RedirectToAction(nameof(PayCreditCard));
+
+        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
+        var card = _systemCards.FirstOrDefault(c => model.CreditCardMasked.EndsWith(c.CardNumber.Substring(Math.Max(0, c.CardNumber.Length - 4))));
+
+        if (account == null || account.Status != "Activa" || card == null || card.Status != "Activa" || card.Debt <= 0)
+        {
+            TempData["ErrorMessage"] = "No se pudo procesar el pago. La cuenta o tarjeta no son válidas o no tienen deuda.";
+            return RedirectToAction(nameof(PayCreditCard));
+        }
+
+        decimal effectiveAmount = Math.Min(model.EnteredAmount, card.Debt);
+        if (effectiveAmount <= 0 || account.Balance < effectiveAmount)
+        {
+            TempData["ErrorMessage"] = "El saldo de la cuenta no es suficiente para cubrir el monto del pago.";
+            return RedirectToAction(nameof(PayCreditCard));
+        }
+
         TempData["SuccessMessage"] = "El pago fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
         return RedirectToAction("Index"); 
     }
@@ -253,6 +290,24 @@ public class CashierController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult ExecutePayLoan(ConfirmPayLoanViewModel model)
     {
+        if (!ModelState.IsValid) return RedirectToAction(nameof(PayLoan));
+
+        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
+        var loan = _systemLoans.FirstOrDefault(l => l.LoanNumber == model.LoanNumber);
+
+        if (account == null || account.Status != "Activa" || loan == null || loan.Status == "Completado" || !loan.HasPendingInstallments || loan.PendingAmount <= 0)
+        {
+            TempData["ErrorMessage"] = "No se pudo procesar el pago. El préstamo o la cuenta no son válidos para pago.";
+            return RedirectToAction(nameof(PayLoan));
+        }
+
+        decimal effectiveAmount = Math.Min(model.EnteredAmount, loan.PendingAmount);
+        if (effectiveAmount <= 0 || account.Balance < effectiveAmount)
+        {
+            TempData["ErrorMessage"] = "El saldo de la cuenta no es suficiente para cubrir el monto del pago.";
+            return RedirectToAction(nameof(PayLoan));
+        }
+
         TempData["SuccessMessage"] = "El pago fue realizado correctamente, pero no fue posible enviar el correo de notificación.";   
         return RedirectToAction("Index"); 
     }
@@ -314,6 +369,20 @@ public class CashierController : Controller
     [ValidateAntiForgeryToken]
     public IActionResult ExecuteThirdPartyTransfer(ConfirmThirdPartyTransferViewModel model)
     {
+        if (!ModelState.IsValid) return RedirectToAction(nameof(ThirdPartyTransfer));
+
+        var sourceAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
+        var destAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.DestinationAccountNumber);
+
+        if (sourceAccount == null || sourceAccount.Status != "Activa" ||
+            destAccount == null || destAccount.Status != "Activa" ||
+            model.SourceAccountNumber == model.DestinationAccountNumber ||
+            model.Amount <= 0 || sourceAccount.Balance < model.Amount)
+        {
+            TempData["ErrorMessage"] = "No se pudo realizar la transferencia. Verifique los datos de las cuentas y el saldo.";
+            return RedirectToAction(nameof(ThirdPartyTransfer));
+        }
+
         TempData["SuccessMessage"] = "La transacción fue realizada correctamente, pero no fue posible enviar una o más notificaciones por correo.";
         return RedirectToAction("Index"); 
     }

@@ -24,19 +24,26 @@
             <div class="mb-4">
                 <label class="custom-label" asp-for="SourceAccountNumber">Número de cuenta origen</label>
                 <input asp-for="SourceAccountNumber" class="custom-input" placeholder="Ej. 111222333" maxlength="9" autocomplete="off" />
+                <span asp-validation-for="SourceAccountNumber" class="text-danger" style="font-size: 0.85rem; margin-top: 5px; display: block;"></span>
             </div>
 
             <div class="mb-4">
                 <label class="custom-label" asp-for="LoanNumber">Número del préstamo (9 dígitos)</label>
                 <input asp-for="LoanNumber" class="custom-input" placeholder="Ej. 123456789" maxlength="9" autocomplete="off" />
+                <span asp-validation-for="LoanNumber" class="text-danger" style="font-size: 0.85rem; margin-top: 5px; display: block;"></span>
             </div>
 
             <div class="mb-2">
                 <label class="custom-label" asp-for="Amount">Monto a pagar (RD$)</label>
                 <input asp-for="Amount" type="number" step="0.01" class="custom-input" placeholder="0.00" style="font-family: inherit; letter-spacing: normal;" />
+                <span asp-validation-for="Amount" class="text-danger" style="font-size: 0.85rem; margin-top: 5px; display: block;"></span>
             </div>
 
             <button type="submit" class="btn-next">Realizar pago</button>
         </form>
     </div>
 </div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

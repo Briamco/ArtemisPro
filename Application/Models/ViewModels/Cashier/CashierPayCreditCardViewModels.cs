@@ -5,6 +5,8 @@ namespace Application.Models.ViewModels.Cashier;
 public class PayCreditCardViewModel
 {
     [Required(ErrorMessage = "El número de cuenta origen es requerido.")]
+    [StringLength(9, MinimumLength = 9, ErrorMessage = "El número de cuenta origen debe contener 9 dígitos.")]
+    [RegularExpression("^[0-9]*$", ErrorMessage = "El número de cuenta origen solo debe contener números.")]
     public string SourceAccountNumber { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El número de tarjeta de crédito es requerido.")]
@@ -13,26 +15,29 @@ public class PayCreditCardViewModel
     public string CreditCardNumber { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El monto a pagar es requerido.")]
-    [Range(0.01, double.MaxValue, ErrorMessage = "El monto a pagar debe ser mayor que cero.")]
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335", ErrorMessage = "El monto a pagar debe ser mayor que cero.")]
     public decimal Amount { get; set; }
 }
 
 public class ConfirmPayCreditCardViewModel
 {
+    [Required(ErrorMessage = "El titular de la cuenta origen es requerido.")]
     public string SourceAccountOwner { get; set; } = string.Empty;
-    public string SourceAccountNumber { get; set; } = string.Empty;
-    public string CreditCardOwner { get; set; } = string.Empty;
-    public string CreditCardMasked { get; set; } = string.Empty;
-    public decimal EnteredAmount { get; set; }
-    public decimal EffectiveAmount { get; set; }
-}
 
-// DTO simulation for cards
-public class CashierSystemCardDto
-{
-    public string CardNumber { get; set; } = string.Empty;
-    public string FirstName { get; set; } = string.Empty;
-    public string LastName { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
-    public decimal Debt { get; set; }
+    [Required(ErrorMessage = "El número de cuenta origen es requerido.")]
+    public string SourceAccountNumber { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "El titular de la tarjeta es requerido.")]
+    public string CreditCardOwner { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "El número de tarjeta es requerido.")]
+    public string CreditCardMasked { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "El monto ingresado es requerido.")]
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335", ErrorMessage = "El monto ingresado debe ser mayor que cero.")]
+    public decimal EnteredAmount { get; set; }
+
+    [Required(ErrorMessage = "El monto efectivo es requerido.")]
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335", ErrorMessage = "El monto efectivo debe ser mayor que cero.")]
+    public decimal EffectiveAmount { get; set; }
 }
