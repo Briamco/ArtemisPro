@@ -12,16 +12,15 @@ using Shared.Interfaces;
 
 namespace Application.Services.Banking;
 
-public class LoanPaymentAppService : ILoanPaymentAppService
+public class LoanPaymentAppService : BankingPaymentServiceBase, ILoanPaymentAppService
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEmailService _emailService;
     private readonly ILogger<LoanPaymentAppService> _logger;
 
     public LoanPaymentAppService(IUnitOfWork unitOfWork, IEmailService emailService, ILogger<LoanPaymentAppService> logger)
+        : base(emailService)
     {
         _unitOfWork = unitOfWork;
-        _emailService = emailService;
         _logger = logger;
     }
 
@@ -69,9 +68,9 @@ public class LoanPaymentAppService : ILoanPaymentAppService
             Preview = new LoanPaymentPreviewDto
             {
                 OriginAccountNumber = account.AccountNumber,
-                OriginAccountClientName = account.Client != null ? $"{account.Client.FirstName} {account.Client.LastName}".Trim() : string.Empty,
+                OriginAccountClientName = BuildOwnerName(account.Client),
                 LoanNumber = loan.LoanNumber,
-                LoanClientName = loan.Client != null ? $"{loan.Client.FirstName} {loan.Client.LastName}".Trim() : string.Empty,
+                LoanClientName = BuildOwnerName(loan.Client),
                 EnteredAmount = amount,
                 EffectiveAmount = effectiveAmount
             }
@@ -93,6 +92,10 @@ public class LoanPaymentAppService : ILoanPaymentAppService
         var account = await _unitOfWork.SavingsAccounts.GetByAccountNumberAsync(dto.AccountNumber);
         if (account == null || account.Status != AccountStatus.Activa)
         {
+            // No se registra una transacción RECHAZADA en este caso porque el registro requiere una
+            // cuenta válida para vincularlo (SavingsAccountId y Origin). Esto es consistente con el
+            // patrón de CardPaymentAppService y ThirdPartyTransactionAppService, donde la cuenta
+            // origen inexistente tampoco genera un registro de rechazo.
             return Failed("El número de cuenta ingresado no corresponde a una cuenta válida.");
         }
 
@@ -144,8 +147,8 @@ public class LoanPaymentAppService : ILoanPaymentAppService
                 _unitOfWork.LoanInstallments.Update(installment);
             }
 
-            var allInstallments = await _unitOfWork.LoanInstallments.FindAsync(i => i.LoanId == loan.Id);
-            if (allInstallments.All(i => i.PaymentStatus == PaymentStatus.Pagada))
+            var allInstallmentsPaid = pendingInstallments.All(i => i.PaymentStatus == PaymentStatus.Pagada);
+            if (allInstallmentsPaid)
             {
                 loan.Status = LoanStatus.Completado;
                 _unitOfWork.Loans.Update(loan);
@@ -181,8 +184,7 @@ public class LoanPaymentAppService : ILoanPaymentAppService
 
     private async Task<IEnumerable<LoanInstallment>> GetPendingInstallmentsAsync(Guid loanId)
     {
-        var installments = await _unitOfWork.LoanInstallments.FindAsync(i => i.LoanId == loanId);
-        return installments.Where(i => i.PaymentStatus != PaymentStatus.Pagada);
+        return await _unitOfWork.LoanInstallments.FindAsync(i => i.LoanId == loanId && i.PaymentStatus != PaymentStatus.Pagada);
     }
 
     private async Task<LoanPaymentResult> RejectAsync(SavingsAccount account, string loanNumber, decimal amount, Guid tellerId, string error)
@@ -207,21 +209,18 @@ public class LoanPaymentAppService : ILoanPaymentAppService
 
     private async Task<bool> SendPaymentNotificationAsync(SavingsAccount account, Loan loan, decimal amount)
     {
-        var loanOwnerEmailSent = true;
+        // SendAsync retorna true cuando no hay email que enviar (cliente o email ausente);
+        // la ausencia de notificación no se considera un fallo del pago.
+        var loanOwnerEmailSent = await SendAsync(
+            loan.Client?.Email,
+            $"Pago realizado al préstamo {loan.LoanNumber}",
+            BuildLoanOwnerBody(loan, account, amount));
+
         var accountOwnerEmailSent = true;
-
-        if (loan.Client != null && !string.IsNullOrEmpty(loan.Client.Email))
-        {
-            loanOwnerEmailSent = await SendAsync(
-                loan.Client.Email,
-                $"Pago realizado al préstamo {loan.LoanNumber}",
-                BuildLoanOwnerBody(loan, account, amount));
-        }
-
-        if (account.ClientId != loan.ClientId && account.Client != null && !string.IsNullOrEmpty(account.Client.Email))
+        if (account.ClientId != loan.ClientId)
         {
             accountOwnerEmailSent = await SendAsync(
-                account.Client.Email,
+                account.Client?.Email,
                 $"Débito realizado desde su cuenta {GetLast4(account.AccountNumber)}",
                 BuildAccountOwnerBody(account, loan, amount));
         }
@@ -231,7 +230,7 @@ public class LoanPaymentAppService : ILoanPaymentAppService
 
     private string BuildLoanOwnerBody(Loan loan, SavingsAccount account, decimal amount)
     {
-        return $"Hola {loan.Client.FirstName} {loan.Client.LastName},<br><br>" +
+        return $"Hola {BuildOwnerName(loan.Client)},<br><br>" +
                $"Se ha realizado un pago a su préstamo {loan.LoanNumber}.<br><br>" +
                $"Monto pagado: RD${amount:N2}<br>" +
                $"Número del préstamo: {loan.LoanNumber}<br>" +
@@ -242,30 +241,11 @@ public class LoanPaymentAppService : ILoanPaymentAppService
 
     private string BuildAccountOwnerBody(SavingsAccount account, Loan loan, decimal amount)
     {
-        return $"Hola {account.Client.FirstName} {account.Client.LastName},<br><br>" +
+        return $"Hola {BuildOwnerName(account.Client)},<br><br>" +
                $"Se ha realizado un débito de RD${amount:N2} desde su cuenta terminada en {GetLast4(account.AccountNumber)} " +
                $"para realizar un pago al préstamo {loan.LoanNumber}.<br><br>" +
                $"Fecha y hora: {DateTime.UtcNow:dd/MM/yyyy hh:mm:ss tt}<br><br>" +
                "Si usted no reconoce esta operación, comuníquese con la entidad bancaria.";
-    }
-
-    private async Task<bool> SendAsync(string to, string subject, string body)
-    {
-        try
-        {
-            await _emailService.SendAsync(to, subject, body);
-            return true;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-
-    private string GetLast4(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Length >= 4 ? value.Substring(value.Length - 4) : value;
     }
 
     private LoanPaymentResult Failed(string error)

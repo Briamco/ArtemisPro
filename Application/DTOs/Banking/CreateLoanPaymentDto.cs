@@ -9,6 +9,7 @@ public class CreateLoanPaymentDto
 
     [Required(ErrorMessage = "El número del préstamo es requerido.")]
     [StringLength(9, MinimumLength = 9, ErrorMessage = "El número del préstamo debe contener 9 dígitos.")]
+    [RegularExpression("^[0-9]*$", ErrorMessage = "El número del préstamo solo debe contener números.")]
     public string LoanNumber { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El monto a pagar es requerido.")]

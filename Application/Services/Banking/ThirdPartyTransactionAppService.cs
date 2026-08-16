@@ -10,16 +10,15 @@ using Shared.Interfaces;
 
 namespace Application.Services.Banking;
 
-public class ThirdPartyTransactionAppService : IThirdPartyTransactionAppService
+public class ThirdPartyTransactionAppService : BankingPaymentServiceBase, IThirdPartyTransactionAppService
 {
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IEmailService _emailService;
     private readonly ILogger<ThirdPartyTransactionAppService> _logger;
 
     public ThirdPartyTransactionAppService(IUnitOfWork unitOfWork, IEmailService emailService, ILogger<ThirdPartyTransactionAppService> logger)
+        : base(emailService)
     {
         _unitOfWork = unitOfWork;
-        _emailService = emailService;
         _logger = logger;
     }
 
@@ -57,9 +56,9 @@ public class ThirdPartyTransactionAppService : IThirdPartyTransactionAppService
             Success = true,
             Preview = new ThirdPartyTransactionPreviewDto
             {
-                SourceAccountOwner = BuildOwnerName(source),
+                SourceAccountOwner = BuildOwnerName(source.Client),
                 SourceAccountNumber = source.AccountNumber,
-                DestinationAccountOwner = BuildOwnerName(destination),
+                DestinationAccountOwner = BuildOwnerName(destination.Client),
                 DestinationAccountNumber = destination.AccountNumber,
                 Amount = amount
             }
@@ -183,7 +182,7 @@ public class ThirdPartyTransactionAppService : IThirdPartyTransactionAppService
 
     private string BuildOriginOwnerBody(SavingsAccount source, SavingsAccount destination, decimal amount)
     {
-        return $"Hola {BuildOwnerName(source)},<br><br>" +
+        return $"Hola {BuildOwnerName(source.Client)},<br><br>" +
                "Se ha realizado una transacción desde su cuenta de ahorro hacia otra cuenta.<br><br>" +
                $"Monto transferido: RD${amount:N2}<br>" +
                $"Cuenta origen terminada en: {GetLast4(source.AccountNumber)}<br>" +
@@ -194,43 +193,13 @@ public class ThirdPartyTransactionAppService : IThirdPartyTransactionAppService
 
     private string BuildDestinationOwnerBody(SavingsAccount source, SavingsAccount destination, decimal amount)
     {
-        return $"Hola {BuildOwnerName(destination)},<br><br>" +
+        return $"Hola {BuildOwnerName(destination.Client)},<br><br>" +
                "Se ha recibido una transacción en su cuenta de ahorro.<br><br>" +
                $"Monto recibido: RD${amount:N2}<br>" +
                $"Cuenta origen terminada en: {GetLast4(source.AccountNumber)}<br>" +
                $"Cuenta destino terminada en: {GetLast4(destination.AccountNumber)}<br>" +
                $"Fecha y hora: {DateTime.UtcNow:dd/MM/yyyy hh:mm:ss tt}<br><br>" +
                "Si usted no reconoce esta operación, comuníquese con la entidad bancaria.";
-    }
-
-    private async Task<bool> SendAsync(string? to, string subject, string body)
-    {
-        if (string.IsNullOrEmpty(to))
-        {
-            return true;
-        }
-
-        try
-        {
-            await _emailService.SendAsync(to, subject, body);
-            return true;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-
-    private string BuildOwnerName(SavingsAccount account)
-    {
-        if (account.Client == null) return string.Empty;
-        return $"{account.Client.FirstName} {account.Client.LastName}".Trim();
-    }
-
-    private string GetLast4(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        return value.Length >= 4 ? value.Substring(value.Length - 4) : value;
     }
 
     private ThirdPartyTransactionResult Failed(string error)

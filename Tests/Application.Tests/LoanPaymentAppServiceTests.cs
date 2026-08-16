@@ -136,14 +136,20 @@ public class LoanPaymentAppServiceTests
     private void SetupRepositories(SavingsAccount? account, Loan? loan, List<LoanInstallment>? installments = null)
     {
         _savingsAccounts
-            .Setup(r => r.GetByAccountNumberAsync(It.IsAny<string>()))
+            .Setup(r => r.GetByAccountNumberAsync(It.Is<string>(s => string.IsNullOrEmpty(s))))
+            .ReturnsAsync((SavingsAccount?)null);
+        _savingsAccounts
+            .Setup(r => r.GetByAccountNumberAsync(It.Is<string>(s => !string.IsNullOrEmpty(s))))
             .ReturnsAsync(account);
         _loans
             .Setup(r => r.GetByLoanNumberAsync(It.IsAny<string>()))
             .ReturnsAsync(loan);
         _loanInstallments
             .Setup(r => r.FindAsync(It.IsAny<Expression<Func<LoanInstallment, bool>>>()))
-            .ReturnsAsync(installments ?? new List<LoanInstallment>());
+            .ReturnsAsync((Expression<Func<LoanInstallment, bool>> predicate) =>
+                (IEnumerable<LoanInstallment>)(installments ?? new List<LoanInstallment>())
+                    .Where(predicate.Compile())
+                    .ToList());
     }
 
     private static List<LoanInstallment> BuildThreePendingInstallments(Guid loanId)
@@ -247,6 +253,24 @@ public class LoanPaymentAppServiceTests
 
         // Act
         var result = await _service.GetLoanPaymentPreviewAsync("999999999", loan.LoanNumber, 1000m);
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Equal("El número de cuenta ingresado no corresponde a una cuenta válida.", result.Error);
+        Assert.Null(result.Preview);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task GetLoanPaymentPreviewAsync_NullOrEmptyAccountNumber_ReturnsError(string? accountNumber)
+    {
+        // Arrange
+        var loan = BuildActiveLoan();
+        SetupRepositories(BuildActiveAccount(), loan, BuildThreePendingInstallments(loan.Id));
+
+        // Act
+        var result = await _service.GetLoanPaymentPreviewAsync(accountNumber!, loan.LoanNumber, 1000m);
 
         // Assert
         Assert.False(result.Success);
