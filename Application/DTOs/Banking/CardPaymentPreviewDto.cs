@@ -9,3 +9,10 @@ public class CardPaymentPreviewDto
     public decimal EnteredAmount { get; set; }
     public decimal EffectiveAmount { get; set; }
 }
+
+public class CardPaymentPreviewResult
+{
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+    public CardPaymentPreviewDto? Preview { get; set; }
+}

@@ -23,33 +23,54 @@ public class CardPaymentAppService : ICardPaymentAppService
         _logger = logger;
     }
 
-    public async Task<CardPaymentPreviewDto?> GetCardPaymentPreviewAsync(string accountNumber, string cardNumber, decimal amount)
+    public async Task<CardPaymentPreviewResult> GetCardPaymentPreviewAsync(string accountNumber, string cardNumber, decimal amount)
     {
-        if (amount <= 0 || string.IsNullOrWhiteSpace(cardNumber) || cardNumber.Length != 16)
+        if (amount <= 0)
         {
-            return null;
+            return PreviewFailed("El monto a pagar debe ser mayor que cero.");
+        }
+
+        if (string.IsNullOrWhiteSpace(cardNumber) || cardNumber.Length != 16)
+        {
+            return PreviewFailed("El número de tarjeta debe contener 16 dígitos.");
         }
 
         var account = await _unitOfWork.SavingsAccounts.GetByAccountNumberAsync(accountNumber);
         if (account == null || account.Status != AccountStatus.Activa)
         {
-            return null;
+            return PreviewFailed("El número de cuenta ingresado no corresponde a una cuenta válida.");
         }
 
         var card = await _unitOfWork.CreditCards.GetByCardNumberAsync(cardNumber);
-        if (card == null || card.Status != CardStatus.Activa || card.Debt <= 0)
+        if (card == null || card.Status != CardStatus.Activa)
         {
-            return null;
+            return PreviewFailed("El número de tarjeta ingresado no corresponde a una tarjeta válida.");
         }
 
-        return new CardPaymentPreviewDto
+        if (card.Debt <= 0)
         {
-            OriginAccountNumber = account.AccountNumber,
-            OriginAccountClientName = $"{account.Client.FirstName} {account.Client.LastName}",
-            CardLast4 = GetLast4(card.CardNumber),
-            CardClientName = $"{card.Client.FirstName} {card.Client.LastName}",
-            EnteredAmount = amount,
-            EffectiveAmount = Math.Min(amount, card.Debt)
+            return PreviewFailed("La tarjeta seleccionada no tiene deuda pendiente.");
+        }
+
+        var effectiveAmount = Math.Min(amount, card.Debt);
+
+        if (account.Balance < effectiveAmount)
+        {
+            return PreviewFailed("El monto ingresado excede el saldo disponible de la cuenta.");
+        }
+
+        return new CardPaymentPreviewResult
+        {
+            Success = true,
+            Preview = new CardPaymentPreviewDto
+            {
+                OriginAccountNumber = account.AccountNumber,
+                OriginAccountClientName = account.Client != null ? $"{account.Client.FirstName} {account.Client.LastName}".Trim() : string.Empty,
+                CardLast4 = GetLast4(card.CardNumber),
+                CardClientName = card.Client != null ? $"{card.Client.FirstName} {card.Client.LastName}".Trim() : string.Empty,
+                EnteredAmount = amount,
+                EffectiveAmount = effectiveAmount
+            }
         };
     }
 
@@ -201,13 +222,19 @@ public class CardPaymentAppService : ICardPaymentAppService
         }
     }
 
-    private string GetLast4(string value)
+    private string GetLast4(string? value)
     {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
         return value.Length >= 4 ? value.Substring(value.Length - 4) : value;
     }
 
     private CardPaymentResult Failed(string error)
     {
         return new CardPaymentResult { Success = false, Error = error, EmailSent = false };
+    }
+
+    private CardPaymentPreviewResult PreviewFailed(string error)
+    {
+        return new CardPaymentPreviewResult { Success = false, Error = error };
     }
 }
