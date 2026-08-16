@@ -32,7 +32,7 @@ namespace Api.BackgroundServices
                     var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
                     var pendingInstallments = await unitOfWork.LoanInstallments
-                        .FindAsync(i => i.PaymentStatus == PaymentStatus.Pendiente && !i.IsOverdue && i.DueDate < DateTime.UtcNow);
+                        .FindAsync(i => i.PaymentStatus != PaymentStatus.Pagada && !i.IsOverdue && i.DueDate < DateTime.UtcNow);
 
                     if (pendingInstallments.Any())
                     {
