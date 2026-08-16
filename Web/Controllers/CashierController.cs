@@ -1,13 +1,27 @@
+using System;
+using System.Threading.Tasks;
 using Application.DTOs.Banking;
+using Application.Interfaces.Services;
 using Application.Models.ViewModels.Cashier;
+using Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Web.Controllers;
 
-//[Authorize(Roles = "Cajero")]
+[Authorize(Roles = "Cajero")]
 public class CashierController : Controller
 {
+    private readonly ICardPaymentAppService _cardPaymentService;
+    private readonly UserManager<ApplicationUser> _userManager;
+
+    public CashierController(ICardPaymentAppService cardPaymentService, UserManager<ApplicationUser> userManager)
+    {
+        _cardPaymentService = cardPaymentService;
+        _userManager = userManager;
+    }
+
     [HttpGet]
     public IActionResult Index()
     {
@@ -28,13 +42,6 @@ public class CashierController : Controller
         new CashierSystemAccountDto { AccountNumber = "111222333", FirstName = "Juan", LastName = "Pérez", Status = "Activa", Balance = 5000.00m },
         new CashierSystemAccountDto { AccountNumber = "444555666", FirstName = "María", LastName = "López", Status = "Inactiva", Balance = 1000.00m },
         new CashierSystemAccountDto { AccountNumber = "999888777", FirstName = "Carlos", LastName = "Ruiz", Status = "Activa", Balance = 0.00m }
-    };
-
-    private static readonly List<CashierSystemCardDto> _systemCards = new()
-    {
-        new CashierSystemCardDto { CardNumber = "1234567890123456", FirstName = "Ana", LastName = "Gómez", Status = "Activa", Debt = 2500.00m },
-        new CashierSystemCardDto { CardNumber = "9876543210987654", FirstName = "Luis", LastName = "Díaz", Status = "Inactiva", Debt = 1000.00m },
-        new CashierSystemCardDto { CardNumber = "1111222233334444", FirstName = "Carlos", LastName = "Ruiz", Status = "Activa", Debt = 0.00m } // Sin deuda
     };
 
     private static readonly List<CashierSystemLoanDto> _systemLoans = new()
@@ -157,49 +164,33 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult PayCreditCard(PayCreditCardViewModel model)
+    public async Task<IActionResult> PayCreditCard(PayCreditCardViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
 
-        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var card = _systemCards.FirstOrDefault(c => c.CardNumber == model.CreditCardNumber);
+        var result = await _cardPaymentService.GetCardPaymentPreviewAsync(model.SourceAccountNumber, model.CreditCardNumber, model.Amount);
 
-        // Validations
-        if (account == null || account.Status != "Activa")
+        if (!result.Success)
         {
-            ModelState.AddModelError("SourceAccountNumber", "El número de cuenta ingresado no corresponde a una cuenta válida.");
+            var error = result.Error ?? "No se pudo procesar el pago. Verifique los datos ingresados.";
+            ModelState.AddModelError(
+                error.Contains("tarjeta") ? "CreditCardNumber"
+                    : error.Contains("cuenta") ? "SourceAccountNumber"
+                    : "Amount",
+                error);
             return View(model);
         }
 
-        if (card == null || card.Status != "Activa")
-        {
-            ModelState.AddModelError("CreditCardNumber", "El número de tarjeta ingresado no corresponde a una tarjeta válida.");
-            return View(model);
-        }
-
-        if (card.Debt <= 0)
-        {
-            ModelState.AddModelError("CreditCardNumber", "La tarjeta seleccionada no tiene deuda pendiente.");
-            return View(model);
-        }
-
-        decimal effectiveAmount = Math.Min(model.Amount, card.Debt);
-
-        if (account.Balance < effectiveAmount)
-        {
-            ModelState.AddModelError("Amount", "El monto ingresado excede el saldo disponible de la cuenta.");
-            return View(model);
-        }
-
+        var preview = result.Preview!;
         var confirmModel = new ConfirmPayCreditCardViewModel
         {
-            SourceAccountOwner = $"{account.FirstName} {account.LastName}",
-            SourceAccountNumber = account.AccountNumber,
-            CreditCardOwner = $"{card.FirstName} {card.LastName}",
-            CreditCardNumber = card.CardNumber,
-            CreditCardMasked = $"**** {card.CardNumber.Substring(12)}",
-            EnteredAmount = model.Amount,
-            EffectiveAmount = effectiveAmount
+            SourceAccountOwner = preview.OriginAccountClientName,
+            SourceAccountNumber = preview.OriginAccountNumber,
+            CreditCardOwner = preview.CardClientName,
+            CreditCardNumber = model.CreditCardNumber,
+            CreditCardMasked = $"**** {preview.CardLast4}",
+            EnteredAmount = preview.EnteredAmount,
+            EffectiveAmount = preview.EffectiveAmount
         };
 
         return View("ConfirmPayCreditCard", confirmModel);
@@ -207,28 +198,35 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ExecutePayCreditCard(ConfirmPayCreditCardViewModel model)
+    public async Task<IActionResult> ExecutePayCreditCard(ConfirmPayCreditCardViewModel model)
     {
         if (!ModelState.IsValid) return RedirectToAction(nameof(PayCreditCard));
 
-        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var card = _systemCards.FirstOrDefault(c => c.CardNumber == model.CreditCardNumber);
-
-        if (account == null || account.Status != "Activa" || card == null || card.Status != "Activa" || card.Debt <= 0)
+        var teller = await _userManager.GetUserAsync(User);
+        if (teller == null)
         {
-            TempData["ErrorMessage"] = "No se pudo procesar el pago. La cuenta o tarjeta no son válidas o no tienen deuda.";
             return RedirectToAction(nameof(PayCreditCard));
         }
 
-        decimal effectiveAmount = Math.Min(model.EnteredAmount, card.Debt);
-        if (effectiveAmount <= 0 || account.Balance < effectiveAmount)
+        var dto = new CreateCardPaymentDto
         {
-            TempData["ErrorMessage"] = "El saldo de la cuenta no es suficiente para cubrir el monto del pago.";
+            AccountNumber = model.SourceAccountNumber,
+            CardNumber = model.CreditCardNumber,
+            Amount = model.EnteredAmount
+        };
+
+        var result = await _cardPaymentService.CreateCardPaymentAsync(teller.Id, dto);
+
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error ?? "No se pudo procesar el pago.";
             return RedirectToAction(nameof(PayCreditCard));
         }
 
-        TempData["SuccessMessage"] = "El pago fue realizado correctamente.";
-        return RedirectToAction("Index"); 
+        TempData["SuccessMessage"] = result.EmailSent
+            ? "El pago fue realizado correctamente."
+            : "El pago fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
+        return RedirectToAction("Index");
     }
 
     // pay loan
