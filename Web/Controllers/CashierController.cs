@@ -14,11 +14,16 @@ namespace Web.Controllers;
 public class CashierController : Controller
 {
     private readonly ICardPaymentAppService _cardPaymentService;
+    private readonly IThirdPartyTransactionAppService _thirdPartyTransactionService;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public CashierController(ICardPaymentAppService cardPaymentService, UserManager<ApplicationUser> userManager)
+    public CashierController(
+        ICardPaymentAppService cardPaymentService,
+        IThirdPartyTransactionAppService thirdPartyTransactionService,
+        UserManager<ApplicationUser> userManager)
     {
         _cardPaymentService = cardPaymentService;
+        _thirdPartyTransactionService = thirdPartyTransactionService;
         _userManager = userManager;
     }
 
@@ -320,45 +325,34 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ThirdPartyTransfer(ThirdPartyTransferViewModel model)
+    public async Task<IActionResult> ThirdPartyTransfer(ThirdPartyTransferViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
 
-        var sourceAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var destAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.DestinationAccountNumber);
+        var result = await _thirdPartyTransactionService.GetPreviewAsync(
+            model.SourceAccountNumber,
+            model.DestinationAccountNumber,
+            model.Amount);
 
-        // Validations
-        if (sourceAccount == null || sourceAccount.Status != "Activa")
+        if (!result.Success)
         {
-            ModelState.AddModelError("SourceAccountNumber", "El número de cuenta origen ingresado no corresponde a una cuenta válida.");
+            var error = result.Error ?? "No se pudo realizar la transacción. Verifique los datos ingresados.";
+            ModelState.AddModelError(
+                error.Contains("origen") ? "SourceAccountNumber"
+                    : error.Contains("destino") ? "DestinationAccountNumber"
+                    : "Amount",
+                error);
             return View(model);
         }
 
-        if (destAccount == null || destAccount.Status != "Activa")
-        {
-            ModelState.AddModelError("DestinationAccountNumber", "El número de cuenta destino ingresado no corresponde a una cuenta válida.");
-            return View(model);
-        }
-
-        if (model.SourceAccountNumber == model.DestinationAccountNumber)
-        {
-            ModelState.AddModelError("DestinationAccountNumber", "La cuenta origen y la cuenta destino no pueden ser la misma.");
-            return View(model);
-        }
-
-        if (sourceAccount.Balance < model.Amount)
-        {
-            ModelState.AddModelError("Amount", "El monto ingresado excede el saldo disponible de la cuenta.");
-            return View(model);
-        }
-
+        var preview = result.Preview!;
         var confirmModel = new ConfirmThirdPartyTransferViewModel
         {
-            SourceAccountOwner = $"{sourceAccount.FirstName} {sourceAccount.LastName}",
-            SourceAccountNumber = sourceAccount.AccountNumber,
-            DestinationAccountOwner = $"{destAccount.FirstName} {destAccount.LastName}",
-            DestinationAccountNumber = destAccount.AccountNumber,
-            Amount = model.Amount
+            SourceAccountOwner = preview.SourceAccountOwner,
+            SourceAccountNumber = preview.SourceAccountNumber,
+            DestinationAccountOwner = preview.DestinationAccountOwner,
+            DestinationAccountNumber = preview.DestinationAccountNumber,
+            Amount = preview.Amount
         };
 
         return View("ConfirmThirdPartyTransfer", confirmModel);
@@ -366,23 +360,34 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ExecuteThirdPartyTransfer(ConfirmThirdPartyTransferViewModel model)
+    public async Task<IActionResult> ExecuteThirdPartyTransfer(ConfirmThirdPartyTransferViewModel model)
     {
         if (!ModelState.IsValid) return RedirectToAction(nameof(ThirdPartyTransfer));
 
-        var sourceAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var destAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.DestinationAccountNumber);
-
-        if (sourceAccount == null || sourceAccount.Status != "Activa" ||
-            destAccount == null || destAccount.Status != "Activa" ||
-            model.SourceAccountNumber == model.DestinationAccountNumber ||
-            model.Amount <= 0 || sourceAccount.Balance < model.Amount)
+        var teller = await _userManager.GetUserAsync(User);
+        if (teller == null)
         {
-            TempData["ErrorMessage"] = "No se pudo realizar la transferencia. Verifique los datos de las cuentas y el saldo.";
             return RedirectToAction(nameof(ThirdPartyTransfer));
         }
 
-        TempData["SuccessMessage"] = "La transacción fue realizada correctamente.";
-        return RedirectToAction("Index"); 
+        var dto = new CreateThirdPartyTransactionDto
+        {
+            SourceAccountNumber = model.SourceAccountNumber,
+            DestinationAccountNumber = model.DestinationAccountNumber,
+            Amount = model.Amount
+        };
+
+        var result = await _thirdPartyTransactionService.CreateTransactionAsync(teller.Id, dto);
+
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error ?? "No se pudo realizar la transacción.";
+            return RedirectToAction(nameof(ThirdPartyTransfer));
+        }
+
+        TempData["SuccessMessage"] = result.EmailSent
+            ? "La transacción fue realizada correctamente."
+            : "La transacción fue realizada correctamente, pero no fue posible enviar una o más notificaciones por correo.";
+        return RedirectToAction("Index");
     }
 }
