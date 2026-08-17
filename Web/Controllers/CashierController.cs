@@ -16,41 +16,53 @@ public class CashierController : Controller
     private readonly ICardPaymentAppService _cardPaymentService;
     private readonly IThirdPartyTransactionAppService _thirdPartyTransactionService;
     private readonly ILoanPaymentAppService _loanPaymentService;
+    private readonly IDepositAppService _depositService;
+    private readonly IWithdrawalAppService _withdrawalService;
+    private readonly Application.Interfaces.Repositories.IUnitOfWork _unitOfWork;
     private readonly UserManager<ApplicationUser> _userManager;
 
     public CashierController(
         ICardPaymentAppService cardPaymentService,
         IThirdPartyTransactionAppService thirdPartyTransactionService,
         ILoanPaymentAppService loanPaymentService,
+        IDepositAppService depositService,
+        IWithdrawalAppService withdrawalService,
+        Application.Interfaces.Repositories.IUnitOfWork unitOfWork,
         UserManager<ApplicationUser> userManager)
     {
         _cardPaymentService = cardPaymentService;
         _thirdPartyTransactionService = thirdPartyTransactionService;
         _loanPaymentService = loanPaymentService;
+        _depositService = depositService;
+        _withdrawalService = withdrawalService;
+        _unitOfWork = unitOfWork;
         _userManager = userManager;
     }
 
     [HttpGet]
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
-         //simulation 
+        var today = DateTime.Today;
+        var teller = await _userManager.GetUserAsync(User);
+        var tellerId = teller?.Id ?? Guid.Empty;
+
+        var allTransactions = await _unitOfWork.Transactions.FindAsync(t => t.PerformedById == tellerId);
+        var todayTransactions = allTransactions.Where(t => t.Date.Date == today).ToList();
+
+        var depositsCount = todayTransactions.Count(t => t.Origin == "DEPÓSITO" && t.Status == Domain.Enums.TransactionStatus.APROBADA);
+        var withdrawalsCount = todayTransactions.Count(t => t.Beneficiary == "RETIRO" && t.Status == Domain.Enums.TransactionStatus.APROBADA);
+        var paymentsCount = todayTransactions.Count(t => (t.Origin == "Pago de préstamo" || t.Beneficiary == "Pago de tarjeta") && t.Status == Domain.Enums.TransactionStatus.APROBADA);
+
         var model = new CashierHomeViewModel
         {
-            TotalDepositsToday = 20,
-            TotalWithdrawalsToday = 10,
-            TotalPaymentsToday = 15, 
-            TotalTransactionsToday = 45 
+            TotalDepositsToday = depositsCount,
+            TotalWithdrawalsToday = withdrawalsCount,
+            TotalPaymentsToday = paymentsCount, 
+            TotalTransactionsToday = todayTransactions.Count(t => t.Status == Domain.Enums.TransactionStatus.APROBADA)
         };
 
         return View(model);
     }
-
-    private static readonly List<CashierSystemAccountDto> _systemAccounts = new()
-    {
-        new CashierSystemAccountDto { AccountNumber = "111222333", FirstName = "Juan", LastName = "Pérez", Status = "Activa", Balance = 5000.00m },
-        new CashierSystemAccountDto { AccountNumber = "444555666", FirstName = "María", LastName = "López", Status = "Inactiva", Balance = 1000.00m },
-        new CashierSystemAccountDto { AccountNumber = "999888777", FirstName = "Carlos", LastName = "Ruiz", Status = "Activa", Balance = 0.00m }
-    };
 
     // DEPOSITS 
     [HttpGet]
@@ -61,14 +73,13 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult Deposit(DepositViewModel model)
+    public async Task<IActionResult> Deposit(DepositViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
 
-        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.AccountNumber);
+        var preview = await _depositService.GetDepositPreviewAsync(model.AccountNumber);
 
-        // validation for account existence and status
-        if (account == null || account.Status != "Activa")
+        if (preview == null)
         {
             ModelState.AddModelError("AccountNumber", "El número de cuenta ingresado no corresponde a una cuenta válida.");
             return View(model);
@@ -76,8 +87,8 @@ public class CashierController : Controller
 
         var confirmModel = new ConfirmDepositViewModel
         {
-            AccountNumber = account.AccountNumber,
-            OwnerName = $"{account.FirstName} {account.LastName}",
+            AccountNumber = preview.AccountNumber,
+            OwnerName = preview.ClientName,
             Amount = model.Amount
         };
 
@@ -86,18 +97,32 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ExecuteDeposit(ConfirmDepositViewModel model)
+    public async Task<IActionResult> ExecuteDeposit(ConfirmDepositViewModel model)
     {
         if (!ModelState.IsValid) return RedirectToAction(nameof(Deposit));
 
-        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.AccountNumber);
-        if (account == null || account.Status != "Activa" || model.Amount <= 0)
+        var teller = await _userManager.GetUserAsync(User);
+        if (teller == null)
         {
-            TempData["ErrorMessage"] = "No se pudo procesar el depósito. La cuenta ingresada no es válida o el monto es incorrecto.";
             return RedirectToAction(nameof(Deposit));
         }
 
-        TempData["SuccessMessage"] = "El depósito fue realizado correctamente.";
+        var dto = new CreateDepositDto
+        {
+            AccountNumber = model.AccountNumber,
+            Amount = model.Amount
+        };
+
+        var result = await _depositService.CreateDepositAsync(teller.Id, dto);
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error ?? "No se pudo procesar el depósito.";
+            return RedirectToAction(nameof(Deposit));
+        }
+
+        TempData["SuccessMessage"] = result.EmailSent
+            ? "El depósito fue realizado correctamente."
+            : "El depósito fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
         return RedirectToAction("Index"); 
     }
 
@@ -110,20 +135,19 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult Withdrawal(WithdrawalViewModel model)
+    public async Task<IActionResult> Withdrawal(WithdrawalViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
 
-        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.AccountNumber);
-
-        // Validations
-        if (account == null || account.Status != "Activa")
+        var preview = await _withdrawalService.GetWithdrawalPreviewAsync(model.AccountNumber);
+        if (preview == null)
         {
             ModelState.AddModelError("AccountNumber", "El número de cuenta ingresado no corresponde a una cuenta válida.");
             return View(model);
         }
 
-        if (account.Balance < model.Amount)
+        var account = await _unitOfWork.SavingsAccounts.GetByAccountNumberAsync(model.AccountNumber);
+        if (account != null && account.Balance < model.Amount)
         {
             ModelState.AddModelError("Amount", "El monto ingresado excede el saldo disponible de la cuenta.");
             return View(model);
@@ -131,8 +155,8 @@ public class CashierController : Controller
 
         var confirmModel = new ConfirmWithdrawalViewModel
         {
-            AccountNumber = account.AccountNumber,
-            OwnerName = $"{account.FirstName} {account.LastName}",
+            AccountNumber = preview.AccountNumber,
+            OwnerName = preview.ClientName,
             Amount = model.Amount
         };
 
@@ -141,18 +165,32 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ExecuteWithdrawal(ConfirmWithdrawalViewModel model)
+    public async Task<IActionResult> ExecuteWithdrawal(ConfirmWithdrawalViewModel model)
     { 
         if (!ModelState.IsValid) return RedirectToAction(nameof(Withdrawal));
 
-        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.AccountNumber);
-        if (account == null || account.Status != "Activa" || model.Amount <= 0 || account.Balance < model.Amount)
+        var teller = await _userManager.GetUserAsync(User);
+        if (teller == null)
         {
-            TempData["ErrorMessage"] = "No se pudo procesar el retiro. Verifique el estado de la cuenta y el saldo disponible.";
             return RedirectToAction(nameof(Withdrawal));
         }
 
-        TempData["SuccessMessage"] = "El retiro fue realizado correctamente.";
+        var dto = new CreateWithdrawalDto
+        {
+            AccountNumber = model.AccountNumber,
+            Amount = model.Amount
+        };
+
+        var result = await _withdrawalService.CreateWithdrawalAsync(teller.Id, dto);
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error ?? "No se pudo procesar el retiro.";
+            return RedirectToAction(nameof(Withdrawal));
+        }
+
+        TempData["SuccessMessage"] = result.EmailSent
+            ? "El retiro fue realizado correctamente."
+            : "El retiro fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
         return RedirectToAction("Index"); 
     }
 

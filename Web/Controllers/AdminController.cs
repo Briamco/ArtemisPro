@@ -20,88 +20,84 @@ public class AdminController : Controller
     private readonly ILoanAppService _loanAppService;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ISavingsAccountAppService _savingsAccountAppService;
+    private readonly IAdminDashboardAppService _adminDashboardAppService;
 
     public AdminController(
         Application.Interfaces.Services.ICreditCardAppService creditCardService, 
         Application.Interfaces.Services.IUserAppService userService,
         ILoanAppService loanAppService, 
         UserManager<ApplicationUser> userManager,
-        ISavingsAccountAppService savingsAccountAppService)
+        ISavingsAccountAppService savingsAccountAppService,
+        IAdminDashboardAppService adminDashboardAppService)
     {
         _creditCardService = creditCardService;
         _userService = userService;
         _loanAppService = loanAppService;
         _userManager = userManager;
         _savingsAccountAppService = savingsAccountAppService;
+        _adminDashboardAppService = adminDashboardAppService;
     }
 
     public async Task<IActionResult> Index()
     {
-        var loans = await _loanAppService.GetLoansAsync();
-        
-        var allClients = await _userManager.GetUsersInRoleAsync("Cliente");
-        int activeClients = allClients.Count(u => u.IsActive);
-        int inactiveClients = allClients.Count(u => !u.IsActive);
-        int activeLoans = loans.Count(l => l.Status == "Activo");
-        int activeCards = _dummyCards.Count(c => c.Status == "Activa");
-        var allSavings = await _savingsAccountAppService.GetSavingsAccountsAsync();
-        int activeSavings = allSavings.Count(s => s.Status == "Activa");
-        int totalProducts = activeLoans + activeCards + activeSavings;
-
-        decimal totalLoanDebt = loans.Where(l => l.Status == "Activo").Sum(l => l.PendingAmount);
-        decimal totalCardDebt = _dummyCards.Where(c => c.Status == "Activa").Sum(c => c.DebtAmount);
-        int totalClientsForAvg = activeClients > 0 ? activeClients : 1;
-        decimal avgDebt = Math.Round((totalLoanDebt + totalCardDebt) / totalClientsForAvg, 2);
+        var stats = await _adminDashboardAppService.GetGeneralStatsAsync();
 
         var dashboardData = new AdminDashboardViewModel
         {
-            TotalHistoricalTransactions = 1250,
-            DailyTransactions = 42,
-            TotalHistoricalPayments = 840,
-            DailyPayments = 18,
-            ActiveClients = activeClients,
-            InactiveClients = inactiveClients,
-            AverageDebtPerClient = avgDebt,
-            TotalFinancialProducts = totalProducts,
-            ActiveLoans = activeLoans,
-            ActiveCreditCards = activeCards,
-            ActiveSavingsAccounts = activeSavings
+            TotalHistoricalTransactions = stats.TotalTransaccionesHistoricas,
+            DailyTransactions = stats.TransaccionesDelDia,
+            TotalHistoricalPayments = stats.TotalPagosHistoricos,
+            DailyPayments = stats.PagosDelDia,
+            ActiveClients = stats.ClientesActivos,
+            InactiveClients = stats.ClientesInactivos,
+            AverageDebtPerClient = stats.MontoPromedioDeuda,
+            TotalFinancialProducts = stats.TotalProductosFinancieros,
+            ActiveLoans = stats.PrestamosVigentes,
+            ActiveCreditCards = stats.TarjetasCreditoActivas,
+            ActiveSavingsAccounts = stats.CuentasAhorroActivas
         };
 
         return View(dashboardData);
     }
 
-   //temporary list 
-    private static List<UserViewModel> _dummyUsers = new List<UserViewModel>
-    {
-        new UserViewModel { Id = "1", Username = "jdoe88", Identification = "1234567890", FirstName = "John", LastName = "Doe", Email = "john.doe@email.com", Role = "Administrador", IsActive = true },
-        new UserViewModel { Id = "2", Username = "mgarcia", Identification = "0987654321", FirstName = "Maria", LastName = "Garcia", Email = "m.garcia@email.com", Role = "Cajero", IsActive = true },
-        new UserViewModel { Id = "3", Username = "asmith", Identification = "4561237890", FirstName = "Alice", LastName = "Smith", Email = "alice.s@email.com", Role = "Cliente", IsActive = false }
-    };
-
     [HttpGet]
-    public IActionResult UserManagement(string roleFilter = "Todos", int page = 1)
+    public async Task<IActionResult> UserManagement(string roleFilter = "Todos", int page = 1)
     {
-        var query = _dummyUsers.AsQueryable();
+        var filterRole = roleFilter == "Todos" ? null : roleFilter;
+        var usersDto = await _userService.GetAllUsersAsync(filterRole);
 
-        if (roleFilter != "Todos")
-        {
-            query = query.Where(u => u.Role == roleFilter);
-        }
+        const int pageSize = 20;
+        var totalRecords = usersDto.Count();
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalRecords / (double)pageSize));
+        page = Math.Clamp(page, 1, totalPages);
 
-        var users = query.ToList();
+        var pagedUsers = usersDto
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(u => new UserViewModel
+            {
+                Id = u.Id.ToString(),
+                Username = u.UserName,
+                Identification = u.Cedula,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                Email = u.Email,
+                Role = u.Role,
+                IsActive = u.IsActive
+            })
+            .ToList();
+
         var model = new UserListViewModel
         {
-            Users = users,
+            Users = pagedUsers,
             CurrentFilter = roleFilter,
             CurrentPage = page,
-            TotalPages = 1, 
-            TotalRecords = users.Count
+            TotalPages = totalPages,
+            TotalRecords = totalRecords
         };
 
         return View(model);
     }
-
 
     //create user 
     [HttpGet]
@@ -112,42 +108,56 @@ public class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult CreateUser(CreateUserViewModel model)
+    public async Task<IActionResult> CreateUser(CreateUserViewModel model)
     {
         if (!ModelState.IsValid)
             return View(model);
 
-        var newUser = new UserViewModel
+        var confirmationLinkFormat = Url.Action("ActivateAccount", "Account", new { email = "{0}", token = "{1}" }, Request.Scheme) 
+                                     ?? $"{Request.Scheme}://{Request.Host}/Account/ActivateAccount?email={{0}}&token={{1}}";
+
+        var dto = new Application.DTOs.Identity.CreateUserDto
         {
-            Id = Guid.NewGuid().ToString(),
             FirstName = model.FirstName,
             LastName = model.LastName,
-            Identification = model.Identification,
+            Cedula = model.Identification,
             Email = model.Email,
-            Username = model.Username,
+            UserName = model.Username,
+            Password = model.Password,
             Role = model.Role,
-            IsActive = true 
+            InitialBalance = model.InitialAmount ?? 0m
         };
-  
-        _dummyUsers.Insert(0, newUser);
-        TempData["SuccessMessage"] = "Usuario creado exitosamente.";
 
+        var (success, error) = await _userService.CreateUserAsync(dto, confirmationLinkFormat);
+        if (!success)
+        {
+            TempData["ErrorMessage"] = error;
+            return View(model);
+        }
+
+        TempData["SuccessMessage"] = "Usuario creado exitosamente.";
         return RedirectToAction(nameof(UserManagement));
     }
 
     //edit user
     [HttpGet]
-    public IActionResult EditUser(string id)
+    public async Task<IActionResult> EditUser(string id)
     {
-        var user = _dummyUsers.FirstOrDefault(u => u.Id == id);
+        if (!Guid.TryParse(id, out var userGuid))
+        {
+            TempData["ErrorMessage"] = "El usuario seleccionado no existe.";
+            return RedirectToAction(nameof(UserManagement));
+        }
+
+        var user = await _userService.GetUserByIdAsync(userGuid);
         if (user == null)
         {
             TempData["ErrorMessage"] = "El usuario seleccionado no existe.";
             return RedirectToAction(nameof(UserManagement));
         }
 
-        var currentUsername = User.Identity?.Name ?? "jdoe88"; 
-        if (currentUsername == user.Username)
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser != null && (currentUser.Id == userGuid || currentUser.UserName == user.UserName))
         {
             TempData["ErrorMessage"] = "No puede editar su propia cuenta desde este módulo.";
             return RedirectToAction(nameof(UserManagement));
@@ -155,12 +165,12 @@ public class AdminController : Controller
 
         var model = new EditUserViewModel
         {
-            Id = user.Id,
+            Id = user.Id.ToString(),
             FirstName = user.FirstName,
             LastName = user.LastName,
-            Identification = user.Identification,
+            Identification = user.Cedula,
             Email = user.Email,
-            Username = user.Username,
+            Username = user.UserName,
             Role = user.Role
         };
 
@@ -169,55 +179,79 @@ public class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult EditUser(EditUserViewModel model)
+    public async Task<IActionResult> EditUser(EditUserViewModel model)
     {
         if (!ModelState.IsValid)
             return View(model);
 
-        var user = _dummyUsers.FirstOrDefault(u => u.Id == model.Id);
-        if (user == null)
+        if (!Guid.TryParse(model.Id, out var userGuid))
         {
             TempData["ErrorMessage"] = "El usuario seleccionado no existe.";
             return RedirectToAction(nameof(UserManagement));
         }
 
-        var currentUsername = User.Identity?.Name ?? "jdoe88"; 
-        if (currentUsername == user.Username)
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser != null && (currentUser.Id == userGuid || currentUser.UserName == model.Username))
         {
             TempData["ErrorMessage"] = "No puede editar su propia cuenta desde este módulo.";
             return RedirectToAction(nameof(UserManagement));
         }
 
-        user.FirstName = model.FirstName;
-        user.LastName = model.LastName;
-        user.Identification = model.Identification;
-        user.Email = model.Email;
-        user.Username = model.Username;
-        
+        var dto = new Application.DTOs.Identity.EditUserDto
+        {
+            FirstName = model.FirstName,
+            LastName = model.LastName,
+            Cedula = model.Identification,
+            Email = model.Email,
+            UserName = model.Username,
+            NewPassword = model.NewPassword,
+            ConfirmPassword = model.ConfirmNewPassword,
+            AdditionalAmount = model.AdditionalAmount ?? 0m
+        };
+
+        var (success, error) = await _userService.EditUserAsync(userGuid, dto);
+        if (!success)
+        {
+            TempData["ErrorMessage"] = error;
+            return View(model);
+        }
+
         TempData["SuccessMessage"] = "Usuario actualizado exitosamente.";
         return RedirectToAction(nameof(UserManagement));
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ToggleUserStatus(string id)
+    public async Task<IActionResult> ToggleUserStatus(string id)
     {
-        var user = _dummyUsers.FirstOrDefault(u => u.Id == id);
+        if (!Guid.TryParse(id, out var userGuid))
+        {
+            TempData["ErrorMessage"] = "El usuario seleccionado no existe.";
+            return RedirectToAction(nameof(UserManagement));
+        }
+
+        var user = await _userService.GetUserByIdAsync(userGuid);
         if (user == null)
         {
             TempData["ErrorMessage"] = "El usuario seleccionado no existe.";
             return RedirectToAction(nameof(UserManagement));
         }
 
-        var currentUsername = User.Identity?.Name ?? "jdoe88";
-        if (currentUsername == user.Username)
+        var currentUser = await _userManager.GetUserAsync(User);
+        if (currentUser != null && (currentUser.Id == userGuid || currentUser.UserName == user.UserName))
         {
-            TempData["ErrorMessage"] = "No puede cambiar el estado de su propia cuenta.";
+            TempData["ErrorMessage"] = "No puede modificar el estado de su propia cuenta.";
             return RedirectToAction(nameof(UserManagement));
         }
 
-        user.IsActive = !user.IsActive;
-        TempData["SuccessMessage"] = user.IsActive 
+        var (success, error) = await _userService.ToggleUserStatusAsync(userGuid);
+        if (!success)
+        {
+            TempData["ErrorMessage"] = error;
+            return RedirectToAction(nameof(UserManagement));
+        }
+
+        TempData["SuccessMessage"] = !user.IsActive 
             ? "Usuario activado exitosamente." 
             : "Usuario inactivado exitosamente.";
 
@@ -226,16 +260,16 @@ public class AdminController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ActivateUser(string id)
+    public async Task<IActionResult> ActivateUser(string id)
     {
-        return ToggleUserStatus(id);
+        return await ToggleUserStatus(id);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult InactivateUser(string id)
+    public async Task<IActionResult> InactivateUser(string id)
     {
-        return ToggleUserStatus(id);
+        return await ToggleUserStatus(id);
     }
 
     [HttpGet]
@@ -573,13 +607,6 @@ public class AdminController : Controller
     }
 
     // CREDIT CARD MANAGMENT
-
-    private static List<CreditCardViewModel> _dummyCards = new List<CreditCardViewModel>
-    {
-        new CreditCardViewModel { Id = "1", MaskedNumber = "**** **** **** 4921", ClientName = "Carlos Mendoza", ClientCedula = "092-3456781-9", CreditLimit = 5000.00m, ExpirationDate = "12/26", DebtAmount = 1250.00m, Status = "Activa" },
-        new CreditCardViewModel { Id = "2", MaskedNumber = "**** **** **** 8832", ClientName = "Ana Solís", ClientCedula = "175-8392011-4", CreditLimit = 2500.00m, ExpirationDate = "08/24", DebtAmount = 0.00m, Status = "Cancelada" },
-        new CreditCardViewModel { Id = "3", MaskedNumber = "**** **** **** 1094", ClientName = "Roberto García", ClientCedula = "050-1234567-8", CreditLimit = 10000.00m, ExpirationDate = "11/27", DebtAmount = 3420.50m, Status = "Activa" }
-    };
 
     [HttpGet]
     public async Task<IActionResult> CreditCardManagement(string statusFilter = "Activas", string searchCedula = "", int page = 1)
@@ -962,8 +989,8 @@ public class AdminController : Controller
                 Date = t.Date,
                 Amount = t.Amount,
                 Type = t.Type,
-                Beneficiary = t.Beneficiary,
-                Origin = t.Origin,
+                Beneficiary = ResolveTransactionBeneficiary(t.Beneficiary),
+                Origin = ResolveTransactionOrigin(t.Origin),
                 Status = t.Status
             }).ToList()
         };
@@ -1021,5 +1048,21 @@ public class AdminController : Controller
         }
 
         return RedirectToAction(nameof(SavingsAccountManagement));
+    }
+
+    private static string ResolveTransactionBeneficiary(string? beneficiary)
+    {
+        if (string.IsNullOrWhiteSpace(beneficiary)) return "-";
+        if (beneficiary.Length == 16 && beneficiary.All(char.IsDigit))
+            return beneficiary.Substring(12);
+        return beneficiary;
+    }
+
+    private static string ResolveTransactionOrigin(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin)) return "-";
+        if (origin.Length == 16 && origin.All(char.IsDigit))
+            return origin.Substring(12);
+        return origin;
     }
 }
