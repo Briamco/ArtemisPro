@@ -14,11 +14,19 @@ namespace Web.Controllers;
 public class CashierController : Controller
 {
     private readonly ICardPaymentAppService _cardPaymentService;
+    private readonly IThirdPartyTransactionAppService _thirdPartyTransactionService;
+    private readonly ILoanPaymentAppService _loanPaymentService;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public CashierController(ICardPaymentAppService cardPaymentService, UserManager<ApplicationUser> userManager)
+    public CashierController(
+        ICardPaymentAppService cardPaymentService,
+        IThirdPartyTransactionAppService thirdPartyTransactionService,
+        ILoanPaymentAppService loanPaymentService,
+        UserManager<ApplicationUser> userManager)
     {
         _cardPaymentService = cardPaymentService;
+        _thirdPartyTransactionService = thirdPartyTransactionService;
+        _loanPaymentService = loanPaymentService;
         _userManager = userManager;
     }
 
@@ -42,13 +50,6 @@ public class CashierController : Controller
         new CashierSystemAccountDto { AccountNumber = "111222333", FirstName = "Juan", LastName = "Pérez", Status = "Activa", Balance = 5000.00m },
         new CashierSystemAccountDto { AccountNumber = "444555666", FirstName = "María", LastName = "López", Status = "Inactiva", Balance = 1000.00m },
         new CashierSystemAccountDto { AccountNumber = "999888777", FirstName = "Carlos", LastName = "Ruiz", Status = "Activa", Balance = 0.00m }
-    };
-
-    private static readonly List<CashierSystemLoanDto> _systemLoans = new()
-    {
-        new CashierSystemLoanDto { LoanNumber = "111222333", FirstName = "Pedro", LastName = "Martínez", Status = "Activo", PendingAmount = 2000.00m, HasPendingInstallments = true },
-        new CashierSystemLoanDto { LoanNumber = "444555666", FirstName = "Laura", LastName = "Sánchez", Status = "Completado", PendingAmount = 0.00m, HasPendingInstallments = false },
-        new CashierSystemLoanDto { LoanNumber = "777888999", FirstName = "José", LastName = "Reyes", Status = "Activo", PendingAmount = 50000.00m, HasPendingInstallments = false } 
     };
 
     // DEPOSITS 
@@ -238,48 +239,32 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult PayLoan(PayLoanViewModel model)
+    public async Task<IActionResult> PayLoan(PayLoanViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
 
-        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var loan = _systemLoans.FirstOrDefault(l => l.LoanNumber == model.LoanNumber);
+        var result = await _loanPaymentService.GetLoanPaymentPreviewAsync(model.SourceAccountNumber, model.LoanNumber, model.Amount);
 
-        // Validations
-        if (account == null || account.Status != "Activa")
+        if (!result.Success)
         {
-            ModelState.AddModelError("SourceAccountNumber", "El número de cuenta ingresado no corresponde a una cuenta válida.");
+            var error = result.Error ?? "No se pudo procesar el pago. Verifique los datos ingresados.";
+            ModelState.AddModelError(
+                error.Contains("cuenta") ? "SourceAccountNumber"
+                    : error.Contains("préstamo") ? "LoanNumber"
+                    : "Amount",
+                error);
             return View(model);
         }
 
-        if (loan == null || loan.Status == "Completado")
-        {
-            ModelState.AddModelError("LoanNumber", "El número de préstamo ingresado no corresponde a un préstamo válido.");
-            return View(model);
-        }
-
-        if (!loan.HasPendingInstallments || loan.PendingAmount <= 0)
-        {
-            ModelState.AddModelError("LoanNumber", "El préstamo seleccionado no tiene cuotas pendientes de pago.");
-            return View(model);
-        }
-
-        decimal effectiveAmount = Math.Min(model.Amount, loan.PendingAmount);
-
-        if (account.Balance < effectiveAmount)
-        {
-            ModelState.AddModelError("Amount", "El monto ingresado excede el saldo disponible de la cuenta.");
-            return View(model);
-        }
-
+        var preview = result.Preview!;
         var confirmModel = new ConfirmPayLoanViewModel
         {
-            SourceAccountOwner = $"{account.FirstName} {account.LastName}",
-            SourceAccountNumber = account.AccountNumber,
-            LoanOwner = $"{loan.FirstName} {loan.LastName}",
-            LoanNumber = loan.LoanNumber,
-            EnteredAmount = model.Amount,
-            EffectiveAmount = effectiveAmount
+            SourceAccountOwner = preview.OriginAccountClientName,
+            SourceAccountNumber = preview.OriginAccountNumber,
+            LoanOwner = preview.LoanClientName,
+            LoanNumber = preview.LoanNumber,
+            EnteredAmount = preview.EnteredAmount,
+            EffectiveAmount = preview.EffectiveAmount
         };
 
         return View("ConfirmPayLoan", confirmModel);
@@ -287,28 +272,35 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ExecutePayLoan(ConfirmPayLoanViewModel model)
+    public async Task<IActionResult> ExecutePayLoan(ConfirmPayLoanViewModel model)
     {
         if (!ModelState.IsValid) return RedirectToAction(nameof(PayLoan));
 
-        var account = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var loan = _systemLoans.FirstOrDefault(l => l.LoanNumber == model.LoanNumber);
-
-        if (account == null || account.Status != "Activa" || loan == null || loan.Status == "Completado" || !loan.HasPendingInstallments || loan.PendingAmount <= 0)
+        var teller = await _userManager.GetUserAsync(User);
+        if (teller == null)
         {
-            TempData["ErrorMessage"] = "No se pudo procesar el pago. El préstamo o la cuenta no son válidos para pago.";
             return RedirectToAction(nameof(PayLoan));
         }
 
-        decimal effectiveAmount = Math.Min(model.EnteredAmount, loan.PendingAmount);
-        if (effectiveAmount <= 0 || account.Balance < effectiveAmount)
+        var dto = new CreateLoanPaymentDto
         {
-            TempData["ErrorMessage"] = "El saldo de la cuenta no es suficiente para cubrir el monto del pago.";
+            AccountNumber = model.SourceAccountNumber,
+            LoanNumber = model.LoanNumber,
+            Amount = model.EnteredAmount
+        };
+
+        var result = await _loanPaymentService.CreateLoanPaymentAsync(teller.Id, dto);
+
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error ?? "No se pudo procesar el pago.";
             return RedirectToAction(nameof(PayLoan));
         }
 
-        TempData["SuccessMessage"] = "El pago fue realizado correctamente.";   
-        return RedirectToAction("Index"); 
+        TempData["SuccessMessage"] = result.EmailSent
+            ? "El pago fue realizado correctamente."
+            : "El pago fue realizado correctamente, pero no fue posible enviar el correo de notificación.";
+        return RedirectToAction("Index");
     }
 
     // third party transfer
@@ -320,45 +312,34 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ThirdPartyTransfer(ThirdPartyTransferViewModel model)
+    public async Task<IActionResult> ThirdPartyTransfer(ThirdPartyTransferViewModel model)
     {
         if (!ModelState.IsValid) return View(model);
 
-        var sourceAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var destAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.DestinationAccountNumber);
+        var result = await _thirdPartyTransactionService.GetPreviewAsync(
+            model.SourceAccountNumber,
+            model.DestinationAccountNumber,
+            model.Amount);
 
-        // Validations
-        if (sourceAccount == null || sourceAccount.Status != "Activa")
+        if (!result.Success)
         {
-            ModelState.AddModelError("SourceAccountNumber", "El número de cuenta origen ingresado no corresponde a una cuenta válida.");
+            var error = result.Error ?? "No se pudo realizar la transacción. Verifique los datos ingresados.";
+            ModelState.AddModelError(
+                error.Contains("origen") ? "SourceAccountNumber"
+                    : error.Contains("destino") ? "DestinationAccountNumber"
+                    : "Amount",
+                error);
             return View(model);
         }
 
-        if (destAccount == null || destAccount.Status != "Activa")
-        {
-            ModelState.AddModelError("DestinationAccountNumber", "El número de cuenta destino ingresado no corresponde a una cuenta válida.");
-            return View(model);
-        }
-
-        if (model.SourceAccountNumber == model.DestinationAccountNumber)
-        {
-            ModelState.AddModelError("DestinationAccountNumber", "La cuenta origen y la cuenta destino no pueden ser la misma.");
-            return View(model);
-        }
-
-        if (sourceAccount.Balance < model.Amount)
-        {
-            ModelState.AddModelError("Amount", "El monto ingresado excede el saldo disponible de la cuenta.");
-            return View(model);
-        }
-
+        var preview = result.Preview!;
         var confirmModel = new ConfirmThirdPartyTransferViewModel
         {
-            SourceAccountOwner = $"{sourceAccount.FirstName} {sourceAccount.LastName}",
-            SourceAccountNumber = sourceAccount.AccountNumber,
-            DestinationAccountOwner = $"{destAccount.FirstName} {destAccount.LastName}",
-            DestinationAccountNumber = destAccount.AccountNumber,
-            Amount = model.Amount
+            SourceAccountOwner = preview.SourceAccountOwner,
+            SourceAccountNumber = preview.SourceAccountNumber,
+            DestinationAccountOwner = preview.DestinationAccountOwner,
+            DestinationAccountNumber = preview.DestinationAccountNumber,
+            Amount = preview.Amount
         };
 
         return View("ConfirmThirdPartyTransfer", confirmModel);
@@ -366,23 +347,34 @@ public class CashierController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ExecuteThirdPartyTransfer(ConfirmThirdPartyTransferViewModel model)
+    public async Task<IActionResult> ExecuteThirdPartyTransfer(ConfirmThirdPartyTransferViewModel model)
     {
         if (!ModelState.IsValid) return RedirectToAction(nameof(ThirdPartyTransfer));
 
-        var sourceAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.SourceAccountNumber);
-        var destAccount = _systemAccounts.FirstOrDefault(a => a.AccountNumber == model.DestinationAccountNumber);
-
-        if (sourceAccount == null || sourceAccount.Status != "Activa" ||
-            destAccount == null || destAccount.Status != "Activa" ||
-            model.SourceAccountNumber == model.DestinationAccountNumber ||
-            model.Amount <= 0 || sourceAccount.Balance < model.Amount)
+        var teller = await _userManager.GetUserAsync(User);
+        if (teller == null)
         {
-            TempData["ErrorMessage"] = "No se pudo realizar la transferencia. Verifique los datos de las cuentas y el saldo.";
             return RedirectToAction(nameof(ThirdPartyTransfer));
         }
 
-        TempData["SuccessMessage"] = "La transacción fue realizada correctamente.";
-        return RedirectToAction("Index"); 
+        var dto = new CreateThirdPartyTransactionDto
+        {
+            SourceAccountNumber = model.SourceAccountNumber,
+            DestinationAccountNumber = model.DestinationAccountNumber,
+            Amount = model.Amount
+        };
+
+        var result = await _thirdPartyTransactionService.CreateTransactionAsync(teller.Id, dto);
+
+        if (!result.Success)
+        {
+            TempData["ErrorMessage"] = result.Error ?? "No se pudo realizar la transacción.";
+            return RedirectToAction(nameof(ThirdPartyTransfer));
+        }
+
+        TempData["SuccessMessage"] = result.EmailSent
+            ? "La transacción fue realizada correctamente."
+            : "La transacción fue realizada correctamente, pero no fue posible enviar una o más notificaciones por correo.";
+        return RedirectToAction("Index");
     }
 }
