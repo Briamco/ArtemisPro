@@ -13,4 +13,5 @@ public interface ILoanAppService
     Task<LoanCreationResult> CreateLoanAsync(CreateLoanDto dto);
     Task<(bool Success, string? Error)> UpdateLoanRateAsync(Guid id, UpdateLoanRateDto dto);
     Task<(decimal AverageDebt, bool HasClients)> GetAverageDebtAsync();
+    Task<IEnumerable<LoanDto>> GetClientLoansAsync(Guid clientId);
 }

@@ -126,7 +126,16 @@
             </select>
         </form>
         <div style="color: var(--text-muted); font-size: 0.85rem;">
-            Mostrando 1-6 de @Model.TotalRecords registros
+            @if (Model.TotalRecords > 0)
+            {
+                var startRecord = ((Model.CurrentPage - 1) * 20) + 1;
+                var endRecord = Math.Min(Model.CurrentPage * 20, Model.TotalRecords);
+                <span>Mostrando @startRecord-@endRecord de @Model.TotalRecords registros</span>
+            }
+            else
+            {
+                <span>No se encontraron usuarios</span>
+            }
         </div>
     </div>
 
@@ -145,6 +154,14 @@
                 </tr>
             </thead>
             <tbody>
+                @if (!Model.Users.Any())
+                {
+                    <tr>
+                        <td colspan="8" class="text-center" style="color: var(--text-muted); padding: 30px;">
+                            No hay usuarios registrados para este filtro.
+                        </td>
+                    </tr>
+                }
                 @foreach (var user in Model.Users)
                 {
                     <tr>
@@ -170,7 +187,7 @@
 
                             @if (user.IsActive)
                             {
-                                <form asp-action="InactivateUser" asp-route-id="@user.Id" method="post" style="display:inline;">
+                                <form asp-action="InactivateUser" asp-route-id="@user.Id" method="post" style="display:inline;" onsubmit="return confirm('¿Está seguro que desea inactivar este usuario?');">
                                     <button type="submit" style="background: none; border: none; padding: 0; color: #FF6B6B; cursor: pointer;" title="Inactivar">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
                                     </button>
@@ -178,7 +195,7 @@
                             }
                             else
                             {
-                                <form asp-action="ActivateUser" asp-route-id="@user.Id" method="post" style="display:inline;">
+                                <form asp-action="ActivateUser" asp-route-id="@user.Id" method="post" style="display:inline;" onsubmit="return confirm('¿Está seguro que desea activar este usuario?');">
                                     <button type="submit" style="background: none; border: none; padding: 0; color: #00E589; cursor: pointer;" title="Activar">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     </button>
@@ -190,17 +207,42 @@
             </tbody>
         </table>
         
-        <!-- Paginación estática de diseño -->
-        <div class="d-flex justify-content-between align-items-center mt-4" style="color: var(--text-muted); font-size: 0.9rem;">
-            <a href="#" style="color: var(--text-muted); text-decoration: none;">&lt; Anterior</a>
-            <div class="d-flex gap-2">
-                <span style="background-color: rgba(0, 229, 255, 0.1); color: var(--cyan-accent); padding: 5px 12px; border-radius: 4px; font-weight: 600;">1</span>
-                <span style="padding: 5px 12px; cursor: pointer;">2</span>
-                <span style="padding: 5px 12px; cursor: pointer;">3</span>
-                <span style="padding: 5px 12px;">...</span>
-                <span style="padding: 5px 12px; cursor: pointer;">@Model.TotalPages</span>
+        <!-- Paginación dinámica funcional -->
+        @if (Model.TotalPages > 1)
+        {
+            <div class="d-flex justify-content-between align-items-center mt-4" style="color: var(--text-muted); font-size: 0.9rem;">
+                @if (Model.CurrentPage > 1)
+                {
+                    <a asp-action="UserManagement" asp-route-roleFilter="@Model.CurrentFilter" asp-route-page="@(Model.CurrentPage - 1)" style="color: var(--text-muted); text-decoration: none;">&lt; Anterior</a>
+                }
+                else
+                {
+                    <span style="color: #4A5568; cursor: not-allowed;">&lt; Anterior</span>
+                }
+
+                <div class="d-flex gap-2">
+                    @for (int p = 1; p <= Model.TotalPages; p++)
+                    {
+                        if (p == Model.CurrentPage)
+                        {
+                            <span style="background-color: rgba(0, 229, 255, 0.1); color: var(--cyan-accent); padding: 5px 12px; border-radius: 4px; font-weight: 600;">@p</span>
+                        }
+                        else
+                        {
+                            <a asp-action="UserManagement" asp-route-roleFilter="@Model.CurrentFilter" asp-route-page="@p" style="color: var(--text-muted); text-decoration: none; padding: 5px 12px;">@p</a>
+                        }
+                    }
+                </div>
+
+                @if (Model.CurrentPage < Model.TotalPages)
+                {
+                    <a asp-action="UserManagement" asp-route-roleFilter="@Model.CurrentFilter" asp-route-page="@(Model.CurrentPage + 1)" style="color: var(--text-muted); text-decoration: none;">Siguiente &gt;</a>
+                }
+                else
+                {
+                    <span style="color: #4A5568; cursor: not-allowed;">Siguiente &gt;</span>
+                }
             </div>
-            <a href="#" style="color: var(--text-muted); text-decoration: none;">Siguiente &gt;</a>
-        </div>
+        }
     </div>
 </div>

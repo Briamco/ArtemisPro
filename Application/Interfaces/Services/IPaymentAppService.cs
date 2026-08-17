@@ -7,4 +7,5 @@ public interface IPaymentAppService
 {
     Task<(bool Success, string? Error)> PayCreditCardAsync(PayCreditCardDto dto);
     Task<(bool Success, string? Error)> PayLoanAsync(PayLoanDto dto);
+    Task<(bool Success, string? Error)> CashAdvanceAsync(CashAdvanceDto dto);
 }

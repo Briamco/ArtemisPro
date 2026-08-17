@@ -12,4 +12,5 @@ public interface ISavingsAccountAppService
     Task<IEnumerable<TransactionDto>> GetTransactionsAsync(Guid accountId);
     Task<(bool Success, string? Error)> CreateSavingsAccountAsync(CreateSavingsAccountDto dto);
     Task<(bool Success, string? Error)> CancelSavingsAccountAsync(Guid id);
+    Task<IEnumerable<SavingsAccountDto>> GetClientAccountsAsync(Guid clientId);
 }

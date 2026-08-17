@@ -191,8 +191,8 @@ public class LoanAppService : ILoanAppService
                 Type = TransactionType.CRÉDITO,
                 Status = TransactionStatus.APROBADA,
                 Date = DateTime.UtcNow,
-                Origin = "Desembolso de Préstamo",
-                Beneficiary = $"{client.FirstName} {client.LastName}"
+                Origin = loan.LoanNumber,
+                Beneficiary = primaryAccount.AccountNumber
             };
             
             await _unitOfWork.Transactions.AddAsync(transaction);
@@ -208,7 +208,29 @@ public class LoanAppService : ILoanAppService
 
         // Send email notification
         var subject = "Préstamo aprobado";
-        var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Su préstamo número {loan.LoanNumber} por un monto de {dto.ApprovedAmount:C} ha sido aprobado y acreditado a su cuenta principal.<br>Plazo: {dto.Term} meses<br>Tasa de interés anual: {dto.AnnualInterestRate}%<br>Cuota mensual: {baseMonthlyPayment:C}<br><br>Gracias por confiar en nosotros.";
+        var body = $"""
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e1e4e6; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <div style="background-color: #1a237e; padding: 20px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">Artemis Banking Pro</h1>
+                </div>
+                <div style="padding: 30px; color: #333333; line-height: 1.6;">
+                    <h2 style="color: #1a237e; margin-top: 0; font-size: 20px;">¡Hola {client.FirstName} {client.LastName}!</h2>
+                    <p>Su préstamo ha sido aprobado correctamente.</p>
+                    <div style="background-color: #f4f6f9; border-left: 4px solid #1a237e; padding: 15px 20px; margin: 20px 0; border-radius: 0 6px 6px 0;">
+                        <p style="margin: 6px 0;"><strong>Número de préstamo:</strong> {loan.LoanNumber}</p>
+                        <p style="margin: 6px 0;"><strong>Monto aprobado:</strong> {dto.ApprovedAmount:C}</p>
+                        <p style="margin: 6px 0;"><strong>Plazo:</strong> {dto.Term} meses</p>
+                        <p style="margin: 6px 0;"><strong>Tasa de interés anual:</strong> {dto.AnnualInterestRate}%</p>
+                        <p style="margin: 6px 0;"><strong>Cuota mensual:</strong> {baseMonthlyPayment:C}</p>
+                    </div>
+                    <p style="color: #2e7d32; font-weight: 600;">El monto aprobado ha sido depositado en su cuenta de ahorro principal.</p>
+                </div>
+                <div style="background-color: #f8f9fa; padding: 15px 30px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e1e4e6;">
+                    Este es un correo automático, por favor no responda a este mensaje.<br/>
+                    &copy; {DateTime.UtcNow.Year} Artemis Banking Pro. Todos los derechos reservados.
+                </div>
+            </div>
+            """;
         try
         {
             if (!string.IsNullOrEmpty(client.Email))
@@ -292,8 +314,33 @@ public class LoanAppService : ILoanAppService
         var client = await _unitOfWork.Users.GetByIdAsync(loan.ClientId);
         if (client != null && !string.IsNullOrEmpty(client.Email))
         {
-            var subject = "Actualización de Tasa de Interés";
-            var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Le informamos que la tasa de interés de su préstamo {loan.LoanNumber} ha sido actualizada a {dto.AnnualInterestRate}%. Sus cuotas futuras han sido recalculadas.<br><br>Atentamente,<br>Artemis Banking Pro";
+            var nextInstallment = futureInstallments.FirstOrDefault();
+            decimal nextInstallmentAmount = nextInstallment?.Amount ?? 0m;
+            string nextDueDateStr = nextInstallment?.DueDate.ToString("dd/MM/yyyy") ?? "N/A";
+
+            var subject = "Actualización de tasa de interés de préstamo";
+            var body = $"""
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e1e4e6; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <div style="background-color: #1a237e; padding: 20px; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">Artemis Banking Pro</h1>
+                    </div>
+                    <div style="padding: 30px; color: #333333; line-height: 1.6;">
+                        <h2 style="color: #1a237e; margin-top: 0; font-size: 20px;">¡Hola {client.FirstName} {client.LastName}!</h2>
+                        <p>La tasa de interés de su préstamo <strong>{loan.LoanNumber}</strong> ha sido actualizada.</p>
+                        <div style="background-color: #f4f6f9; border-left: 4px solid #1a237e; padding: 15px 20px; margin: 20px 0; border-radius: 0 6px 6px 0;">
+                            <p style="margin: 6px 0;"><strong>Número de préstamo:</strong> {loan.LoanNumber}</p>
+                            <p style="margin: 6px 0;"><strong>Nueva tasa de interés anual:</strong> {dto.AnnualInterestRate}%</p>
+                            <p style="margin: 6px 0;"><strong>Nuevo valor de la próxima cuota:</strong> {nextInstallmentAmount:C}</p>
+                            <p style="margin: 6px 0;"><strong>Fecha de vencimiento de la próxima cuota:</strong> {nextDueDateStr}</p>
+                        </div>
+                        <p style="color: #666666; font-size: 14px;">Esta modificación aplica únicamente a las cuotas futuras pendientes.</p>
+                    </div>
+                    <div style="background-color: #f8f9fa; padding: 15px 30px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e1e4e6;">
+                        Este es un correo automático, por favor no responda a este mensaje.<br/>
+                        &copy; {DateTime.UtcNow.Year} Artemis Banking Pro. Todos los derechos reservados.
+                    </div>
+                </div>
+                """;
             try
             {
                 await _emailService.SendAsync(client.Email, subject, body);
@@ -385,5 +432,14 @@ public class LoanAppService : ILoanAppService
         {
             await _unitOfWork.LoanInstallments.AddAsync(inst);
         }
+    }
+
+    public async Task<IEnumerable<LoanDto>> GetClientLoansAsync(Guid clientId)
+    {
+        var loansQuery = _unitOfWork.Loans.Query();
+        loansQuery = loansQuery.Include(l => l.Client).Include(l => l.Installments);
+        var loans = await loansQuery.ToListAsync();
+        var clientLoans = loans.Where(l => l.ClientId == clientId);
+        return _mapper.Map<IEnumerable<LoanDto>>(clientLoans);
     }
 }

@@ -107,8 +107,8 @@ public class SavingsAccountAppService : ISavingsAccountAppService
                     SavingsAccountId = newAccount.Id,
                     Amount = dto.InitialBalance,
                     Type = TransactionType.CRÉDITO,
-                    Beneficiary = $"{user.FirstName} {user.LastName}",
-                    Origin = "Apertura de cuenta",
+                    Beneficiary = newAccount.AccountNumber,
+                    Origin = "DEPÓSITO",
                     Status = TransactionStatus.APROBADA,
                     Date = DateTime.UtcNow
                 };
@@ -160,8 +160,8 @@ public class SavingsAccountAppService : ISavingsAccountAppService
                     SavingsAccountId = account.Id,
                     Amount = transferAmount,
                     Type = TransactionType.DÉBITO,
+                    Origin = account.AccountNumber,
                     Beneficiary = primaryAccount.AccountNumber,
-                    Origin = "Cancelación de cuenta",
                     Status = TransactionStatus.APROBADA,
                     Date = DateTime.UtcNow
                 };
@@ -172,8 +172,8 @@ public class SavingsAccountAppService : ISavingsAccountAppService
                     SavingsAccountId = primaryAccount.Id,
                     Amount = transferAmount,
                     Type = TransactionType.CRÉDITO,
-                    Beneficiary = "Transferencia de cuenta cancelada",
                     Origin = account.AccountNumber,
+                    Beneficiary = primaryAccount.AccountNumber,
                     Status = TransactionStatus.APROBADA,
                     Date = DateTime.UtcNow
                 };
@@ -215,5 +215,11 @@ public class SavingsAccountAppService : ISavingsAccountAppService
         } while (existsInSavings || existsInLoans);
 
         return accountNumber;
+    }
+
+    public async Task<IEnumerable<SavingsAccountDto>> GetClientAccountsAsync(Guid clientId)
+    {
+        var accounts = await _unitOfWork.SavingsAccounts.GetByClientIdAsync(clientId);
+        return _mapper.Map<IEnumerable<SavingsAccountDto>>(accounts);
     }
 }
