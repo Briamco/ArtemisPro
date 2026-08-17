@@ -6,7 +6,30 @@ using Shared;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-DotNetEnv.Env.Load();
+try
+{
+    DotNetEnv.Env.TraversePath().Load();
+}
+catch { }
+
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")))
+{
+    var candidatePaths = new[]
+    {
+        Path.Combine(Directory.GetCurrentDirectory(), ".env"),
+        Path.Combine(Directory.GetCurrentDirectory(), "Web", ".env"),
+        Path.Combine(AppContext.BaseDirectory, ".env")
+    };
+    foreach (var path in candidatePaths)
+    {
+        if (File.Exists(path))
+        {
+            try { DotNetEnv.Env.Load(path); } catch { }
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")))
+                break;
+        }
+    }
+}
 
 var builder = WebApplication.CreateBuilder(args);
 

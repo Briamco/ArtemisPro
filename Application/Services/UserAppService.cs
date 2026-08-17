@@ -36,7 +36,7 @@ public class UserAppService : IUserAppService
     {
         IEnumerable<ApplicationUser> users;
         
-        if (!string.IsNullOrEmpty(role))
+        if (!string.IsNullOrEmpty(role) && role != "Todos")
         {
             users = await _userManager.GetUsersInRoleAsync(role);
         }
@@ -49,8 +49,14 @@ public class UserAppService : IUserAppService
         foreach (var user in users)
         {
             var roles = await _userManager.GetRolesAsync(user);
+            var primaryRole = roles.FirstOrDefault() ?? string.Empty;
+
+            // Excluir rol Comercio de la gestión web
+            if (primaryRole == "Comercio" || roles.Contains("Comercio"))
+                continue;
+
             var dto = _mapper.Map<UserDto>(user);
-            dto.Role = roles.FirstOrDefault() ?? string.Empty;
+            dto.Role = primaryRole;
             dtos.Add(dto);
         }
 
@@ -126,8 +132,8 @@ public class UserAppService : IUserAppService
                             SavingsAccountId = account.Id,
                             Amount = dto.InitialBalance,
                             Type = TransactionType.CRÉDITO,
-                            Beneficiary = $"{dto.FirstName} {dto.LastName}",
-                            Origin = "Apertura de cuenta",
+                            Beneficiary = account.AccountNumber,
+                            Origin = "DEPÓSITO",
                             Status = TransactionStatus.APROBADA,
                             Date = DateTime.UtcNow
                         };
@@ -207,8 +213,8 @@ public class UserAppService : IUserAppService
                     SavingsAccountId = mainAccount.Id,
                     Amount = dto.AdditionalAmount,
                     Type = TransactionType.CRÉDITO,
-                    Beneficiary = $"{user.FirstName} {user.LastName}",
-                    Origin = "Abono adicional",
+                    Beneficiary = mainAccount.AccountNumber,
+                    Origin = "DEPÓSITO",
                     Status = TransactionStatus.APROBADA,
                     Date = DateTime.UtcNow
                 };

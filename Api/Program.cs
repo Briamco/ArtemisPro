@@ -10,7 +10,30 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
-DotNetEnv.Env.Load();
+try
+{
+    DotNetEnv.Env.TraversePath().Load();
+}
+catch { }
+
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")))
+{
+    var candidatePaths = new[]
+    {
+        Path.Combine(Directory.GetCurrentDirectory(), ".env"),
+        Path.Combine(Directory.GetCurrentDirectory(), "Api", ".env"),
+        Path.Combine(AppContext.BaseDirectory, ".env")
+    };
+    foreach (var path in candidatePaths)
+    {
+        if (File.Exists(path))
+        {
+            try { DotNetEnv.Env.Load(path); } catch { }
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DB_CONNECTION_STRING")))
+                break;
+        }
+    }
+}
 
 var builder = WebApplication.CreateBuilder(args);
 

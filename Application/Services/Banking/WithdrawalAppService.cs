@@ -34,7 +34,8 @@ public class WithdrawalAppService : IWithdrawalAppService
         return new WithdrawalPreviewDto
         {
             AccountNumber = account.AccountNumber,
-            ClientName = $"{account.Client.FirstName} {account.Client.LastName}"
+            ClientName = $"{account.Client.FirstName} {account.Client.LastName}",
+            Balance = account.Balance
         };
     }
 
