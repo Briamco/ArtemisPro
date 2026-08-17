@@ -26,94 +26,121 @@ public class LoanAppService : ILoanAppService
         _emailService = emailService;
     }
 
-    public async Task<IEnumerable<LoanDto>> GetLoansAsync(string? status = null, string? cedula = null)
+    public async Task<PagedResultDto<LoanDto>> GetLoansAsync(int page, int pageSize, string? status = null, string? identification = null)
     {
-        var loansQuery = _unitOfWork.Loans.Query();
-        loansQuery = loansQuery.Include(l => l.Client).Include(l => l.Installments);
-        IEnumerable<Loan> loans = await loansQuery.ToListAsync();
-        if (!string.IsNullOrEmpty(status) && Enum.TryParse<LoanStatus>(status, out var loanStatus))
-        {
-            loans = loans.Where(l => l.Status == loanStatus);
-        }
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 20) pageSize = 20;
 
-        if (!string.IsNullOrEmpty(cedula))
+        IQueryable<Loan> query = _unitOfWork.Loans.Query()
+            .Include(l => l.Client)
+            .Include(l => l.Installments);
+
+        if (!string.IsNullOrEmpty(identification))
         {
-            var user = (await _unitOfWork.Users.FindAsync(u => u.Cedula == cedula)).FirstOrDefault();
+            var user = (await _unitOfWork.Users.FindAsync(u => u.Cedula == identification)).FirstOrDefault();
             if (user == null)
             {
-                return Enumerable.Empty<LoanDto>();
+                return new PagedResultDto<LoanDto> { Page = page, PageSize = pageSize, TotalRecords = 0, TotalPages = 0, Data = Enumerable.Empty<LoanDto>() };
             }
-            loans = loans.Where(l => l.ClientId == user.Id);
+            query = query.Where(l => l.ClientId == user.Id);
         }
 
-        return _mapper.Map<IEnumerable<LoanDto>>(loans);
+        if (string.IsNullOrEmpty(status) || status.ToLower() == "activos")
+        {
+            query = query.Where(l => l.Status == LoanStatus.Activo);
+        }
+        else if (status.ToLower() == "completados")
+        {
+            query = query.Where(l => l.Status == LoanStatus.Completado);
+        }
+        else if (status.ToLower() != "todos")
+        {
+            return new PagedResultDto<LoanDto> { Page = page, PageSize = pageSize, TotalRecords = 0, TotalPages = 0, Data = Enumerable.Empty<LoanDto>() };
+        }
+
+        query = query.OrderByDescending(l => l.CreatedAt);
+
+        var totalRecords = await query.CountAsync();
+        var totalPages = (int)Math.Ceiling((double)totalRecords / pageSize);
+
+        var loans = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResultDto<LoanDto>
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalRecords = totalRecords,
+            TotalPages = totalPages,
+            Data = _mapper.Map<IEnumerable<LoanDto>>(loans)
+        };
     }
 
-    public async Task<LoanDto?> GetLoanByIdAsync(Guid id)
+    public async Task<LoanDetailDto?> GetLoanByIdAsync(Guid id)
     {
-        var loan = await _unitOfWork.Loans.GetByIdAsync(id);
-        return loan == null ? null : _mapper.Map<LoanDto>(loan);
+        var loan = await _unitOfWork.Loans.Query()
+            .Include(l => l.Client)
+            .Include(l => l.Installments)
+            .FirstOrDefaultAsync(l => l.Id == id);
+
+        if (loan == null) return null;
+
+        return _mapper.Map<LoanDetailDto>(loan);
     }
 
-    public async Task<IEnumerable<LoanInstallmentDto>> GetInstallmentsAsync(Guid loanId)
-    {
-        var installments = await _unitOfWork.LoanInstallments.FindAsync(i => i.LoanId == loanId);
-        return _mapper.Map<IEnumerable<LoanInstallmentDto>>(installments.OrderBy(i => i.InstallmentNumber));
-    }
-
-    public async Task<LoanCreationResult> CreateLoanAsync(CreateLoanDto dto)
+    public async Task<LoanCreationResponseDto?> CreateLoanAsync(CreateLoanDto dto, Guid adminId)
     {
         var client = await _unitOfWork.Users.GetByIdAsync(dto.ClientId);
         if (client == null)
-            return new LoanCreationResult { Success = false, ErrorMessage = "Cliente no encontrado." };
+            throw new InvalidOperationException("Cliente no encontrado.");
 
         if (!client.IsActive)
-            return new LoanCreationResult { Success = false, ErrorMessage = "El cliente no está activo." };
+            throw new InvalidOperationException("El cliente no está activo.");
 
         var activeLoan = await _unitOfWork.Loans.GetActiveByClientIdAsync(dto.ClientId);
         if (activeLoan != null)
-            return new LoanCreationResult { Success = false, ErrorMessage = "Este cliente ya tiene un préstamo activo asignado." };
+            throw new InvalidOperationException("Este cliente ya tiene un préstamo activo asignado.");
 
         var allowedTerms = new[] { 6, 12, 18, 24, 30, 36, 42, 48, 54, 60 };
-        if (!allowedTerms.Contains(dto.Term))
-            return new LoanCreationResult { Success = false, ErrorMessage = "El plazo seleccionado no es válido." };
+        if (!allowedTerms.Contains(dto.TermInMonths))
+            throw new InvalidOperationException("El plazo seleccionado no es válido.");
 
         var primaryAccount = await _unitOfWork.SavingsAccounts.GetPrimaryByClientIdAsync(dto.ClientId);
         if (primaryAccount == null || primaryAccount.Status != AccountStatus.Activa)
-            return new LoanCreationResult { Success = false, ErrorMessage = "El cliente no tiene una cuenta de ahorro principal activa para recibir el desembolso del préstamo." };
+            throw new InvalidOperationException("El cliente no tiene una cuenta de ahorro principal activa para recibir el desembolso del préstamo.");
 
-        // 1. Calculate Average Debt of the System
         var (averageDebt, hasClients) = await GetAverageDebtAsync();
 
-        // 2. Calculate Current Debt of the Client
         var currentLoansDebt = await _unitOfWork.LoanInstallments.GetTotalPendingDebtByClientIdAsync(dto.ClientId);
         var currentCardsDebt = await _unitOfWork.CreditCards.GetTotalActiveDebtByClientIdAsync(dto.ClientId);
 
         var currentDebt = currentLoansDebt + currentCardsDebt;
 
-        // 3. Calculate Projected Debt
         decimal monthlyInterestRate = (dto.AnnualInterestRate / 100m) / 12m;
         decimal baseMonthlyPayment = 0;
 
         if (monthlyInterestRate > 0)
         {
-            var factor = (decimal)Math.Pow((double)(1 + monthlyInterestRate), dto.Term);
-            baseMonthlyPayment = Math.Round(dto.ApprovedAmount * (monthlyInterestRate * factor) / (factor - 1), 2);
+            var factor = (decimal)Math.Pow((double)(1 + monthlyInterestRate), dto.TermInMonths);
+            baseMonthlyPayment = Math.Round(dto.CapitalAmount * (monthlyInterestRate * factor) / (factor - 1), 2);
         }
         else
         {
-            baseMonthlyPayment = Math.Round(dto.ApprovedAmount / dto.Term, 2);
+            baseMonthlyPayment = Math.Round(dto.CapitalAmount / dto.TermInMonths, 2);
         }
 
         decimal totalToPayNewLoan = 0;
-        decimal tempBalance = dto.ApprovedAmount;
-        for (int i = 1; i <= dto.Term; i++)
+        decimal tempBalance = dto.CapitalAmount;
+        for (int i = 1; i <= dto.TermInMonths; i++)
         {
             decimal interestAmount = Math.Round(tempBalance * monthlyInterestRate, 2);
             decimal capitalAmount = Math.Round(baseMonthlyPayment - interestAmount, 2);
             decimal paymentAmount = baseMonthlyPayment;
 
-            if (i == dto.Term)
+            if (i == dto.TermInMonths)
             {
                 capitalAmount = Math.Round(tempBalance, 2);
                 paymentAmount = Math.Round(capitalAmount + interestAmount, 2);
@@ -125,41 +152,33 @@ public class LoanAppService : ILoanAppService
 
         var projectedDebt = currentDebt + totalToPayNewLoan;
 
-        // 4. Validate High Risk
         if (hasClients && !dto.ConfirmHighRisk)
         {
             if (currentDebt > averageDebt)
             {
-                return new LoanCreationResult
-                {
-                    Success = false,
-                    IsHighRiskConflict = true,
-                    RiskType = "CurrentHighRisk",
-                    CurrentDebt = currentDebt,
-                    ProjectedDebt = projectedDebt,
-                    AverageDebt = averageDebt,
-                    ErrorMessage = "Este cliente se considera de alto riesgo, ya que su deuda actual supera el promedio del sistema."
-                };
+                throw new HighRiskConflictException(
+                    "CurrentHighRisk",
+                    currentDebt,
+                    projectedDebt,
+                    averageDebt,
+                    "Este cliente se considera de alto riesgo, ya que su deuda actual supera el promedio del sistema."
+                );
             }
 
             if (projectedDebt > averageDebt)
             {
-                return new LoanCreationResult
-                {
-                    Success = false,
-                    IsHighRiskConflict = true,
-                    RiskType = "ProjectedHighRisk",
-                    CurrentDebt = currentDebt,
-                    ProjectedDebt = projectedDebt,
-                    AverageDebt = averageDebt,
-                    ErrorMessage = "Asignar este préstamo convertirá al cliente en un cliente de alto riesgo, ya que su deuda superará el umbral promedio del sistema."
-                };
+                throw new HighRiskConflictException(
+                    "ProjectedHighRisk",
+                    currentDebt,
+                    projectedDebt,
+                    averageDebt,
+                    "Asignar este préstamo convertirá al cliente en un cliente de alto riesgo, ya que su deuda superará el umbral promedio del sistema."
+                );
             }
         }
 
-        // Proceed to create loan
         await _unitOfWork.BeginTransactionAsync();
-        Loan? loan = null;
+        Loan loan;
         try
         {
             var loanNumber = await GenerateUniqueLoanNumberAsync();
@@ -167,27 +186,25 @@ public class LoanAppService : ILoanAppService
             {
                 ClientId = dto.ClientId,
                 LoanNumber = loanNumber,
-                ApprovedAmount = dto.ApprovedAmount,
-                Term = dto.Term,
+                ApprovedAmount = dto.CapitalAmount,
+                Term = dto.TermInMonths,
                 AnnualInterestRate = dto.AnnualInterestRate,
                 Status = LoanStatus.Activo,
                 CreatedAt = DateTime.UtcNow,
-                AdminId = dto.AdminId
+                AdminId = adminId
             };
 
             await _unitOfWork.Loans.AddAsync(loan);
 
-            // Generate Installments
             await GenerateInstallmentsAsync(loan, monthlyInterestRate, baseMonthlyPayment);
             
-            // Credit approved amount to primary savings account
-            primaryAccount.Balance += dto.ApprovedAmount;
+            primaryAccount.Balance += dto.CapitalAmount;
             _unitOfWork.SavingsAccounts.Update(primaryAccount);
 
             var transaction = new Transaction
             {
                 SavingsAccountId = primaryAccount.Id,
-                Amount = dto.ApprovedAmount,
+                Amount = dto.CapitalAmount,
                 Type = TransactionType.CRÉDITO,
                 Status = TransactionStatus.APROBADA,
                 Date = DateTime.UtcNow,
@@ -206,9 +223,8 @@ public class LoanAppService : ILoanAppService
             throw;
         }
 
-        // Send email notification
         var subject = "Préstamo aprobado";
-        var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Su préstamo número {loan.LoanNumber} por un monto de {dto.ApprovedAmount:C} ha sido aprobado y acreditado a su cuenta principal.<br>Plazo: {dto.Term} meses<br>Tasa de interés anual: {dto.AnnualInterestRate}%<br>Cuota mensual: {baseMonthlyPayment:C}<br><br>Gracias por confiar en nosotros.";
+        var body = $"Estimado/a {client.FirstName} {client.LastName},<br><br>Su préstamo número {loan.LoanNumber} por un monto de {dto.CapitalAmount:C} ha sido aprobado y acreditado a su cuenta principal.<br>Plazo: {dto.TermInMonths} meses<br>Tasa de interés anual: {dto.AnnualInterestRate}%<br>Cuota mensual: {baseMonthlyPayment:C}<br><br>Gracias por confiar en nosotros.";
         try
         {
             if (!string.IsNullOrEmpty(client.Email))
@@ -218,11 +234,22 @@ public class LoanAppService : ILoanAppService
         }
         catch (Exception)
         {
-            // Se silencia la excepción para no abortar la creación del préstamo
-            // si el servicio de mensajería falla.
         }
 
-        return new LoanCreationResult { Success = true };
+        return new LoanCreationResponseDto
+        {
+            Id = loan.Id,
+            LoanNumber = loan.LoanNumber,
+            ClientId = loan.ClientId,
+            ClientFullName = $"{client.FirstName} {client.LastName}",
+            CapitalAmount = dto.CapitalAmount,
+            TermInMonths = dto.TermInMonths,
+            AnnualInterestRate = dto.AnnualInterestRate,
+            MonthlyInstallment = baseMonthlyPayment,
+            TotalAmountToPay = totalToPayNewLoan,
+            Status = "Activo",
+            CreatedAt = loan.CreatedAt
+        };
     }
 
     public async Task<(bool Success, string? Error)> UpdateLoanRateAsync(Guid id, UpdateLoanRateDto dto)
@@ -265,7 +292,7 @@ public class LoanAppService : ILoanAppService
                 decimal capitalAmount = Math.Round(newMonthlyPayment - interestAmount, 2);
                 decimal paymentAmount = newMonthlyPayment;
 
-                if (i == remainingTerm - 1) // Adjust last payment to fix decimals
+                if (i == remainingTerm - 1)
                 {
                     capitalAmount = Math.Round(tempBalance, 2);
                     paymentAmount = Math.Round(capitalAmount + interestAmount, 2);
@@ -276,14 +303,13 @@ public class LoanAppService : ILoanAppService
                 inst.Amount = paymentAmount;
                 inst.InterestAmount = interestAmount;
                 inst.CapitalAmount = capitalAmount;
-                inst.PendingBalance = paymentAmount; // Pending amount is full for these
+                inst.PendingBalance = paymentAmount;
                 
                 _unitOfWork.LoanInstallments.Update(inst);
             }
         }
         else
         {
-            // No future installments to recalculate
             return (false, "No existen cuotas futuras pendientes para recalcular.");
         }
 
@@ -300,7 +326,6 @@ public class LoanAppService : ILoanAppService
             }
             catch (Exception)
             {
-                // Silence exception
             }
         }
 
@@ -357,7 +382,7 @@ public class LoanAppService : ILoanAppService
             decimal capitalAmount = Math.Round(monthlyPayment - interestAmount, 2);
             decimal paymentAmount = monthlyPayment;
 
-            if (i == loan.Term) // Adjust last payment to fix decimals
+            if (i == loan.Term)
             {
                 capitalAmount = Math.Round(pendingBalance, 2);
                 paymentAmount = Math.Round(capitalAmount + interestAmount, 2);
@@ -373,7 +398,7 @@ public class LoanAppService : ILoanAppService
                 Amount = paymentAmount,
                 InterestAmount = interestAmount,
                 CapitalAmount = capitalAmount,
-                PendingBalance = paymentAmount, // Monto pendiente por pagar de esa cuota
+                PendingBalance = paymentAmount,
                 PaymentStatus = PaymentStatus.Pendiente,
                 IsOverdue = false
             };
@@ -385,5 +410,22 @@ public class LoanAppService : ILoanAppService
         {
             await _unitOfWork.LoanInstallments.AddAsync(inst);
         }
+    }
+}
+
+public class HighRiskConflictException : Exception
+{
+    public string RiskType { get; }
+    public decimal CurrentDebt { get; }
+    public decimal ProjectedDebt { get; }
+    public decimal AverageDebt { get; }
+
+    public HighRiskConflictException(string riskType, decimal currentDebt, decimal projectedDebt, decimal averageDebt, string message)
+        : base(message)
+    {
+        RiskType = riskType;
+        CurrentDebt = currentDebt;
+        ProjectedDebt = projectedDebt;
+        AverageDebt = averageDebt;
     }
 }

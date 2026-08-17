@@ -2,9 +2,8 @@ using System;
 
 namespace Application.DTOs.Banking;
 
-public class LoanInstallmentDto
+public class LoanAmortizationRowDto
 {
-    public Guid Id { get; set; }
     public int InstallmentNumber { get; set; }
     public DateTime DueDate { get; set; }
     public decimal InstallmentAmount { get; set; }
