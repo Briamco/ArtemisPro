@@ -18,7 +18,7 @@ public class CashierController : Controller
     private readonly ILoanPaymentAppService _loanPaymentService;
     private readonly IDepositAppService _depositService;
     private readonly IWithdrawalAppService _withdrawalService;
-    private readonly Application.Interfaces.Repositories.IUnitOfWork _unitOfWork;
+    private readonly ICashierDashboardAppService _dashboardService;
     private readonly UserManager<ApplicationUser> _userManager;
 
     public CashierController(
@@ -27,7 +27,7 @@ public class CashierController : Controller
         ILoanPaymentAppService loanPaymentService,
         IDepositAppService depositService,
         IWithdrawalAppService withdrawalService,
-        Application.Interfaces.Repositories.IUnitOfWork unitOfWork,
+        ICashierDashboardAppService dashboardService,
         UserManager<ApplicationUser> userManager)
     {
         _cardPaymentService = cardPaymentService;
@@ -35,30 +35,24 @@ public class CashierController : Controller
         _loanPaymentService = loanPaymentService;
         _depositService = depositService;
         _withdrawalService = withdrawalService;
-        _unitOfWork = unitOfWork;
+        _dashboardService = dashboardService;
         _userManager = userManager;
     }
 
     [HttpGet]
     public async Task<IActionResult> Index()
     {
-        var today = DateTime.Today;
         var teller = await _userManager.GetUserAsync(User);
         var tellerId = teller?.Id ?? Guid.Empty;
 
-        var allTransactions = await _unitOfWork.Transactions.FindAsync(t => t.PerformedById == tellerId);
-        var todayTransactions = allTransactions.Where(t => t.Date.Date == today).ToList();
-
-        var depositsCount = todayTransactions.Count(t => t.Origin == "DEPÓSITO" && t.Status == Domain.Enums.TransactionStatus.APROBADA);
-        var withdrawalsCount = todayTransactions.Count(t => t.Beneficiary == "RETIRO" && t.Status == Domain.Enums.TransactionStatus.APROBADA);
-        var paymentsCount = todayTransactions.Count(t => (t.Origin == "Pago de préstamo" || t.Beneficiary == "Pago de tarjeta") && t.Status == Domain.Enums.TransactionStatus.APROBADA);
+        var stats = await _dashboardService.GetTellerDailyStatsAsync(tellerId);
 
         var model = new CashierHomeViewModel
         {
-            TotalDepositsToday = depositsCount,
-            TotalWithdrawalsToday = withdrawalsCount,
-            TotalPaymentsToday = paymentsCount, 
-            TotalTransactionsToday = todayTransactions.Count(t => t.Status == Domain.Enums.TransactionStatus.APROBADA)
+            TotalDepositsToday = stats.TotalDepositsToday,
+            TotalWithdrawalsToday = stats.TotalWithdrawalsToday,
+            TotalPaymentsToday = stats.TotalPaymentsToday,
+            TotalTransactionsToday = stats.TotalTransactionsToday
         };
 
         return View(model);
@@ -146,8 +140,7 @@ public class CashierController : Controller
             return View(model);
         }
 
-        var account = await _unitOfWork.SavingsAccounts.GetByAccountNumberAsync(model.AccountNumber);
-        if (account != null && account.Balance < model.Amount)
+        if (preview.Balance < model.Amount)
         {
             ModelState.AddModelError("Amount", "El monto ingresado excede el saldo disponible de la cuenta.");
             return View(model);
