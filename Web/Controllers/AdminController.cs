@@ -9,6 +9,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System;
+using Web.Helpers;
 
 namespace Web.Controllers;
 
@@ -989,8 +990,8 @@ public class AdminController : Controller
                 Date = t.Date,
                 Amount = t.Amount,
                 Type = t.Type,
-                Beneficiary = ResolveTransactionBeneficiary(t.Beneficiary),
-                Origin = ResolveTransactionOrigin(t.Origin),
+                Beneficiary = TransactionHelpers.ResolveTransactionBeneficiary(t.Beneficiary),
+                Origin = TransactionHelpers.ResolveTransactionOrigin(t.Origin),
                 Status = t.Status
             }).ToList()
         };
@@ -1048,21 +1049,5 @@ public class AdminController : Controller
         }
 
         return RedirectToAction(nameof(SavingsAccountManagement));
-    }
-
-    private static string ResolveTransactionBeneficiary(string? beneficiary)
-    {
-        if (string.IsNullOrWhiteSpace(beneficiary)) return "-";
-        if (beneficiary.Length == 16 && beneficiary.All(char.IsDigit))
-            return beneficiary.Substring(12);
-        return beneficiary;
-    }
-
-    private static string ResolveTransactionOrigin(string? origin)
-    {
-        if (string.IsNullOrWhiteSpace(origin)) return "-";
-        if (origin.Length == 16 && origin.All(char.IsDigit))
-            return origin.Substring(12);
-        return origin;
     }
 }

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Application.DTOs.Banking;
-using Application.Interfaces.Repositories;
 using Application.Interfaces.Services;
 using Application.Models.ViewModels.Client;
 using Domain.Entities;
@@ -11,6 +10,7 @@ using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Web.Helpers;
 
 namespace Web.Controllers;
 
@@ -18,7 +18,6 @@ namespace Web.Controllers;
 public class ClientController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IUnitOfWork _unitOfWork;
     private readonly ISavingsAccountAppService _savingsAccountService;
     private readonly ILoanAppService _loanService;
     private readonly ICreditCardAppService _creditCardService;
@@ -29,7 +28,6 @@ public class ClientController : Controller
 
     public ClientController(
         UserManager<ApplicationUser> userManager,
-        IUnitOfWork unitOfWork,
         ISavingsAccountAppService savingsAccountService,
         ILoanAppService loanService,
         ICreditCardAppService creditCardService,
@@ -39,7 +37,6 @@ public class ClientController : Controller
         IThirdPartyTransactionAppService thirdPartyTransactionService)
     {
         _userManager = userManager;
-        _unitOfWork = unitOfWork;
         _savingsAccountService = savingsAccountService;
         _loanService = loanService;
         _creditCardService = creditCardService;
@@ -55,26 +52,26 @@ public class ClientController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return RedirectToAction("Login", "Account");
 
-        var rawAccounts = await _unitOfWork.SavingsAccounts.GetByClientIdAsync(user.Id);
-        var activeAccounts = rawAccounts
-            .Where(a => a.Status == AccountStatus.Activa)
-            .OrderByDescending(a => a.AccountType == AccountType.Principal)
+        var accounts = await _savingsAccountService.GetClientAccountsAsync(user.Id);
+        var activeAccounts = accounts
+            .Where(a => a.Status == AccountStatus.Activa.ToString())
+            .OrderByDescending(a => a.AccountType == AccountType.Principal.ToString())
             .ThenByDescending(a => a.Balance)
             .Select(a => new ClientAccountViewModel
             {
                 Id = a.Id.ToString(),
                 AccountNumber = a.AccountNumber,
                 Balance = a.Balance,
-                IsPrincipal = a.AccountType == AccountType.Principal
+                IsPrincipal = a.AccountType == AccountType.Principal.ToString()
             })
             .ToList();
 
-        var rawLoans = await _unitOfWork.Loans.GetByClientIdAsync(user.Id);
+        var loans = await _loanService.GetClientLoansAsync(user.Id);
         var activeLoans = new List<ClientLoanViewModel>();
-        foreach (var l in rawLoans.Where(l => l.Status == LoanStatus.Activo))
+        foreach (var l in loans.Where(l => l.Status == LoanStatus.Activo.ToString()))
         {
-            var installments = await _unitOfWork.LoanInstallments.FindAsync(i => i.LoanId == l.Id);
-            var paidCount = installments.Count(i => i.PaymentStatus == PaymentStatus.Pagada);
+            var installments = await _loanService.GetInstallmentsAsync(l.Id);
+            var paidCount = installments.Count(i => i.PaymentStatus == PaymentStatus.Pagada.ToString());
             var pendingDebt = installments.Sum(i => i.PendingBalance);
             var isMora = installments.Any(i => i.IsOverdue);
 
@@ -92,13 +89,13 @@ public class ClientController : Controller
             });
         }
 
-        var rawCards = await _unitOfWork.CreditCards.GetByClientIdAsync(user.Id);
-        var activeCards = rawCards
-            .Where(c => c.Status == CardStatus.Activa)
+        var cards = await _creditCardService.GetClientCardsAsync(user.Id);
+        var activeCards = cards
+            .Where(c => c.Status == CardStatus.Activa.ToString())
             .Select(c => new ClientCardViewModel
             {
                 Id = c.Id.ToString(),
-                MaskedNumber = FormatCardMask(c.CardNumber),
+                MaskedNumber = TransactionHelpers.FormatCardMask(c.MaskedCardNumber),
                 CreditLimit = c.Limit,
                 DebtAmount = c.Debt,
                 ExpirationDate = c.ExpirationDate
@@ -124,11 +121,11 @@ public class ClientController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return RedirectToAction("Login", "Account");
 
-        var account = await _unitOfWork.SavingsAccounts.GetByIdAsync(accountGuid);
+        var account = await _savingsAccountService.GetSavingsAccountByIdAsync(accountGuid);
         if (account == null || account.ClientId != user.Id)
             return RedirectToAction(nameof(Index));
 
-        var rawTransactions = await _unitOfWork.Transactions.FindAsync(t => t.SavingsAccountId == accountGuid);
+        var rawTransactions = await _savingsAccountService.GetTransactionsAsync(accountGuid);
         var transactions = rawTransactions
             .OrderByDescending(t => t.Date)
             .Select(t => new TransactionViewModel
@@ -136,8 +133,8 @@ public class ClientController : Controller
                 Date = t.Date,
                 Amount = t.Amount,
                 Type = t.Type.ToString(),
-                Origin = ResolveTransactionOrigin(t.Origin),
-                Beneficiary = ResolveTransactionBeneficiary(t.Beneficiary),
+                Origin = TransactionHelpers.ResolveTransactionOrigin(t.Origin),
+                Beneficiary = TransactionHelpers.ResolveTransactionBeneficiary(t.Beneficiary),
                 Status = t.Status.ToString()
             })
             .ToList();
@@ -146,7 +143,7 @@ public class ClientController : Controller
         {
             AccountNumber = account.AccountNumber,
             CurrentBalance = account.Balance,
-            IsPrincipal = account.AccountType == AccountType.Principal,
+            IsPrincipal = account.AccountType == AccountType.Principal.ToString(),
             Transactions = transactions
         };
 
@@ -162,11 +159,11 @@ public class ClientController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return RedirectToAction("Login", "Account");
 
-        var loan = await _unitOfWork.Loans.GetByIdAsync(loanGuid);
+        var loan = await _loanService.GetLoanByIdAsync(loanGuid);
         if (loan == null || loan.ClientId != user.Id)
             return RedirectToAction(nameof(Index));
 
-        var rawInstallments = await _unitOfWork.LoanInstallments.FindAsync(i => i.LoanId == loanGuid);
+        var rawInstallments = await _loanService.GetInstallmentsAsync(loanGuid);
         var installments = rawInstallments
             .OrderBy(i => i.InstallmentNumber)
             .Select(i => new AmortizationViewModel
@@ -199,11 +196,11 @@ public class ClientController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return RedirectToAction("Login", "Account");
 
-        var card = await _unitOfWork.CreditCards.GetByIdAsync(cardGuid);
+        var card = await _creditCardService.GetCreditCardByIdAsync(cardGuid);
         if (card == null || card.ClientId != user.Id)
             return RedirectToAction(nameof(Index));
 
-        var rawTransactions = await _unitOfWork.CreditCardTransactions.FindAsync(t => t.CreditCardId == cardGuid);
+        var rawTransactions = await _creditCardService.GetTransactionsAsync(cardGuid);
         var consumptions = rawTransactions
             .OrderByDescending(t => t.Date)
             .Select(t => new ConsumptionViewModel
@@ -211,13 +208,13 @@ public class ClientController : Controller
                 Date = t.Date,
                 Amount = t.Amount,
                 Commerce = t.MerchantName,
-                Status = t.Status.ToString()
+                Status = t.Status
             })
             .ToList();
 
         var model = new ClientCardDetailsViewModel
         {
-            MaskedNumber = FormatCardMask(card.CardNumber),
+            MaskedNumber = TransactionHelpers.FormatCardMask(card.MaskedCardNumber),
             DebtAmount = card.Debt,
             Consumptions = consumptions
         };
@@ -383,7 +380,13 @@ public class ClientController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return RedirectToAction("Login", "Account");
 
-        var sourceAcc = await _unitOfWork.SavingsAccounts.GetByIdAsync(Guid.Parse(model.SourceAccountId));
+        if (!Guid.TryParse(model.SourceAccountId, out var sourceGuid))
+        {
+            TempData["ErrorMessage"] = "Identificador de cuenta inválido.";
+            return RedirectToAction(nameof(TransactionExpress));
+        }
+
+        var sourceAcc = await _savingsAccountService.GetSavingsAccountByIdAsync(sourceGuid);
         if (sourceAcc == null)
         {
             TempData["ErrorMessage"] = "Cuenta de origen no encontrada.";
@@ -597,7 +600,13 @@ public class ClientController : Controller
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return RedirectToAction("Login", "Account");
 
-        var sourceAcc = await _unitOfWork.SavingsAccounts.GetByIdAsync(Guid.Parse(model.SourceAccountId));
+        if (!Guid.TryParse(model.SourceAccountId, out var sourceGuid))
+        {
+            TempData["ErrorMessage"] = "Identificador de cuenta inválido.";
+            return RedirectToAction(nameof(TransactionBeneficiary));
+        }
+
+        var sourceAcc = await _savingsAccountService.GetSavingsAccountByIdAsync(sourceGuid);
         if (sourceAcc == null)
         {
             TempData["ErrorMessage"] = "Cuenta de origen no encontrada.";
@@ -778,30 +787,30 @@ public class ClientController : Controller
     #region Private Helper Methods
     private async Task<List<ClientAccountViewModel>> GetActiveClientAccountsAsync(Guid clientId)
     {
-        var raw = await _unitOfWork.SavingsAccounts.GetByClientIdAsync(clientId);
-        return raw
-            .Where(a => a.Status == AccountStatus.Activa)
-            .OrderByDescending(a => a.AccountType == AccountType.Principal)
+        var accounts = await _savingsAccountService.GetClientAccountsAsync(clientId);
+        return accounts
+            .Where(a => a.Status == AccountStatus.Activa.ToString())
+            .OrderByDescending(a => a.AccountType == AccountType.Principal.ToString())
             .ThenByDescending(a => a.Balance)
             .Select(a => new ClientAccountViewModel
             {
                 Id = a.Id.ToString(),
                 AccountNumber = a.AccountNumber,
                 Balance = a.Balance,
-                IsPrincipal = a.AccountType == AccountType.Principal
+                IsPrincipal = a.AccountType == AccountType.Principal.ToString()
             })
             .ToList();
     }
 
     private async Task<List<ClientCardViewModel>> GetActiveClientCardsAsync(Guid clientId)
     {
-        var raw = await _unitOfWork.CreditCards.GetByClientIdAsync(clientId);
-        return raw
-            .Where(c => c.Status == CardStatus.Activa)
+        var cards = await _creditCardService.GetClientCardsAsync(clientId);
+        return cards
+            .Where(c => c.Status == CardStatus.Activa.ToString())
             .Select(c => new ClientCardViewModel
             {
                 Id = c.Id.ToString(),
-                MaskedNumber = FormatCardMask(c.CardNumber),
+                MaskedNumber = TransactionHelpers.FormatCardMask(c.MaskedCardNumber),
                 CreditLimit = c.Limit,
                 DebtAmount = c.Debt,
                 ExpirationDate = c.ExpirationDate
@@ -811,12 +820,12 @@ public class ClientController : Controller
 
     private async Task<List<ClientLoanViewModel>> GetActiveClientLoansAsync(Guid clientId)
     {
-        var raw = await _unitOfWork.Loans.GetByClientIdAsync(clientId);
+        var loans = await _loanService.GetClientLoansAsync(clientId);
         var activeLoans = new List<ClientLoanViewModel>();
-        foreach (var l in raw.Where(l => l.Status == LoanStatus.Activo))
+        foreach (var l in loans.Where(l => l.Status == LoanStatus.Activo.ToString()))
         {
-            var installments = await _unitOfWork.LoanInstallments.FindAsync(i => i.LoanId == l.Id);
-            var paidCount = installments.Count(i => i.PaymentStatus == PaymentStatus.Pagada);
+            var installments = await _loanService.GetInstallmentsAsync(l.Id);
+            var paidCount = installments.Count(i => i.PaymentStatus == PaymentStatus.Pagada.ToString());
             var pendingDebt = installments.Sum(i => i.PendingBalance);
             var isMora = installments.Any(i => i.IsOverdue);
 
@@ -834,29 +843,6 @@ public class ClientController : Controller
             });
         }
         return activeLoans;
-    }
-
-    private static string FormatCardMask(string? cardNumber)
-    {
-        if (string.IsNullOrWhiteSpace(cardNumber)) return "**** **** **** ****";
-        var last4 = cardNumber.Length >= 4 ? cardNumber.Substring(cardNumber.Length - 4) : cardNumber;
-        return $"**** **** **** {last4}";
-    }
-
-    private static string ResolveTransactionBeneficiary(string? beneficiary)
-    {
-        if (string.IsNullOrWhiteSpace(beneficiary)) return "-";
-        if (beneficiary.Length == 16 && beneficiary.All(char.IsDigit))
-            return beneficiary.Substring(12);
-        return beneficiary;
-    }
-
-    private static string ResolveTransactionOrigin(string? origin)
-    {
-        if (string.IsNullOrWhiteSpace(origin)) return "-";
-        if (origin.Length == 16 && origin.All(char.IsDigit))
-            return origin.Substring(12);
-        return origin;
     }
     #endregion
 }
