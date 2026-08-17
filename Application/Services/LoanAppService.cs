@@ -433,4 +433,13 @@ public class LoanAppService : ILoanAppService
             await _unitOfWork.LoanInstallments.AddAsync(inst);
         }
     }
+
+    public async Task<IEnumerable<LoanDto>> GetClientLoansAsync(Guid clientId)
+    {
+        var loansQuery = _unitOfWork.Loans.Query();
+        loansQuery = loansQuery.Include(l => l.Client).Include(l => l.Installments);
+        var loans = await loansQuery.ToListAsync();
+        var clientLoans = loans.Where(l => l.ClientId == clientId);
+        return _mapper.Map<IEnumerable<LoanDto>>(clientLoans);
+    }
 }

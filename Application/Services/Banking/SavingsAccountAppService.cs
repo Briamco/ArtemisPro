@@ -216,4 +216,10 @@ public class SavingsAccountAppService : ISavingsAccountAppService
 
         return accountNumber;
     }
+
+    public async Task<IEnumerable<SavingsAccountDto>> GetClientAccountsAsync(Guid clientId)
+    {
+        var accounts = await _unitOfWork.SavingsAccounts.GetByClientIdAsync(clientId);
+        return _mapper.Map<IEnumerable<SavingsAccountDto>>(accounts);
+    }
 }

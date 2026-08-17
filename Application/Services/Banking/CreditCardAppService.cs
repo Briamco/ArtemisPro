@@ -209,4 +209,23 @@ public class CreditCardAppService : ICreditCardAppService
         if (string.IsNullOrEmpty(cardNumber) || cardNumber.Length < 4) return cardNumber;
         return "**** **** **** " + cardNumber.Substring(cardNumber.Length - 4);
     }
+
+    public async Task<IEnumerable<CreditCardDto>> GetClientCardsAsync(Guid clientId)
+    {
+        var cards = await _unitOfWork.CreditCards.GetByClientIdAsync(clientId);
+        var user = await _userManager.FindByIdAsync(clientId.ToString());
+        
+        return cards.Select(c => new CreditCardDto
+        {
+            Id = c.Id,
+            MaskedCardNumber = MaskCardNumber(c.CardNumber),
+            ClientId = c.ClientId,
+            ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "",
+            Limit = c.Limit,
+            Debt = c.Debt,
+            ExpirationDate = c.ExpirationDate,
+            Status = c.Status.ToString(),
+            CreatedAt = c.CreatedAt
+        }).OrderByDescending(c => c.Id);
+    }
 }
