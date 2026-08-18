@@ -45,7 +45,12 @@ public class CreditCardController : ControllerBase
     public async Task<IActionResult> AssignCreditCard([FromBody] AssignCreditCardDto dto)
     {
         var (success, error, card) = await _creditCardAppService.AssignCreditCardAsync(dto);
-        if (!success) return BadRequest(new { message = error });
+        if (!success)
+        {
+            if (error != null && error.Contains("no encontrad", StringComparison.OrdinalIgnoreCase))
+                return NotFound(new { message = error });
+            return BadRequest(new { message = error });
+        }
         return StatusCode(201, card);
     }
 
@@ -53,7 +58,12 @@ public class CreditCardController : ControllerBase
     public async Task<IActionResult> UpdateCreditCardLimit(Guid id, [FromBody] UpdateCreditCardLimitDto dto)
     {
         var (success, error) = await _creditCardAppService.UpdateCreditCardLimitAsync(id, dto);
-        if (!success) return BadRequest(new { message = error });
+        if (!success)
+        {
+            if (error != null && error.Contains("no encontrad", StringComparison.OrdinalIgnoreCase))
+                return NotFound(new { message = error });
+            return BadRequest(new { message = error });
+        }
         return NoContent();
     }
 
@@ -61,7 +71,12 @@ public class CreditCardController : ControllerBase
     public async Task<IActionResult> CancelCreditCard(Guid id)
     {
         var (success, error) = await _creditCardAppService.CancelCreditCardAsync(id);
-        if (!success) return BadRequest(new { message = error });
+        if (!success)
+        {
+            if (error != null && error.Contains("no encontrad", StringComparison.OrdinalIgnoreCase))
+                return NotFound(new { message = error });
+            return BadRequest(new { message = error });
+        }
         return NoContent();
     }
 }

@@ -108,7 +108,7 @@ public class CreditCardAppService : ICreditCardAppService
             {
                 Id = t.Id,
                 Amount = t.Amount,
-                MerchantName = t.MerchantName,
+                CommerceName = t.MerchantName,
                 Status = t.Status.ToString(),
                 Date = t.Date
             }).ToList()
@@ -181,7 +181,7 @@ public class CreditCardAppService : ICreditCardAppService
         {
             Id = t.Id,
             Amount = t.Amount,
-            MerchantName = t.MerchantName,
+            CommerceName = t.MerchantName,
             Status = t.Status.ToString(),
             Date = t.Date
         }).OrderByDescending(t => t.Date);
@@ -266,6 +266,7 @@ public class CreditCardAppService : ICreditCardAppService
         var card = await _unitOfWork.CreditCards.GetByIdAsync(id);
         if (card == null) return (false, "Tarjeta no encontrada.");
 
+        if (card.Status != CardStatus.Activa) return (false, "No se puede modificar el límite de una tarjeta cancelada.");
         if (dto.NewLimit <= 0) return (false, "El límite debe ser mayor a cero.");
         if (dto.NewLimit < card.Debt) return (false, "El límite no puede ser menor a la deuda actual.");
 
@@ -292,6 +293,7 @@ public class CreditCardAppService : ICreditCardAppService
         var card = await _unitOfWork.CreditCards.GetByIdAsync(id);
         if (card == null) return (false, "Tarjeta no encontrada.");
 
+        if (card.Status == CardStatus.Cancelada) return (false, "La tarjeta ya está cancelada.");
         if (card.Debt > 0) return (false, "No se puede cancelar una tarjeta con deuda.");
 
         card.Status = CardStatus.Cancelada;
