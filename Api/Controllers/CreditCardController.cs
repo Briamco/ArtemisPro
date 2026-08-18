@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/credit-card")]
 [Authorize(Roles = "Administrador")]
 public class CreditCardController : ControllerBase
 {

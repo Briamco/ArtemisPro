@@ -35,27 +35,14 @@ public class CreditCardAppService : ICreditCardAppService
 
     public async Task<PagedResultDto<CreditCardDto>> GetCreditCardsPagedAsync(int page, int pageSize, string? status, string? identification)
     {
-        var allCards = (await _unitOfWork.CreditCards.GetAllAsync()).ToList();
-        var users = (await _unitOfWork.Users.GetAllAsync()).ToList();
-        var userDict = users.ToDictionary(u => u.Id);
-
-        if (!string.IsNullOrEmpty(status) && Enum.TryParse<CardStatus>(status, true, out var parsedStatus))
-            allCards = allCards.Where(c => c.Status == parsedStatus).ToList();
-
-        if (!string.IsNullOrEmpty(identification))
-        {
-            var user = await _unitOfWork.Users.GetByCedulaAsync(identification);
-            if (user != null)
-                allCards = allCards.Where(c => c.ClientId == user.Id).ToList();
-            else
-                return new PagedResultDto<CreditCardDto>();
-        }
-
-        var ordered = allCards.OrderByDescending(c => c.CreatedAt).ToList();
-        var totalRecords = ordered.Count;
-        var totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
         if (page < 1) page = 1;
-        var paged = ordered.Skip((page - 1) * pageSize).Take(pageSize);
+
+        CardStatus? parsedStatus = null;
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<CardStatus>(status, true, out var ps))
+            parsedStatus = ps;
+
+        var (cards, totalRecords) = await _unitOfWork.CreditCards.GetPagedAsync(page, pageSize, parsedStatus, identification);
+        var totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
 
         return new PagedResultDto<CreditCardDto>
         {
@@ -63,14 +50,14 @@ public class CreditCardAppService : ICreditCardAppService
             PageSize = pageSize,
             TotalRecords = totalRecords,
             TotalPages = totalPages,
-            Data = paged.Select(c => new CreditCardDto
+            Data = cards.Select(c => new CreditCardDto
             {
                 Id = c.Id,
                 MaskedCardNumber = MaskCardNumber(c.CardNumber),
                 LastFourDigits = c.CardNumber.Length >= 4 ? c.CardNumber[^4..] : c.CardNumber,
                 ClientId = c.ClientId,
-                ClientFullName = userDict.ContainsKey(c.ClientId)
-                    ? $"{userDict[c.ClientId].FirstName} {userDict[c.ClientId].LastName}"
+                ClientFullName = c.Client != null
+                    ? $"{c.Client.FirstName} {c.Client.LastName}"
                     : "",
                 CreditLimit = c.Limit,
                 AvailableCredit = c.Limit - c.Debt,
