@@ -1,9 +1,11 @@
+using System;
+using System.Security.Claims;
+using System.Threading.Tasks;
 using Application.DTOs.Banking;
 using Application.Interfaces.Services;
+using Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System;
-using System.Threading.Tasks;
 
 namespace Api.Controllers
 {
@@ -20,10 +22,14 @@ namespace Api.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetLoans([FromQuery] string? status, [FromQuery] string? cedula)
+        public async Task<IActionResult> GetLoans(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? status = null,
+            [FromQuery] string? identification = null)
         {
-            var loans = await _loanAppService.GetLoansAsync(status, cedula);
-            return Ok(loans);
+            var result = await _loanAppService.GetLoansAsync(page, pageSize, status, identification);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
@@ -34,28 +40,41 @@ namespace Api.Controllers
             return Ok(loan);
         }
 
-        [HttpGet("{id}/installments")]
-        public async Task<IActionResult> GetInstallments(Guid id)
-        {
-            var installments = await _loanAppService.GetInstallmentsAsync(id);
-            return Ok(installments);
-        }
-
         [HttpPost]
         public async Task<IActionResult> CreateLoan([FromBody] CreateLoanDto dto)
         {
-            var result = await _loanAppService.CreateLoanAsync(dto);
-            if (!result.Success)
-                return BadRequest(result);
-            return Ok(result);
+            var adminIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(adminIdClaim) || !Guid.TryParse(adminIdClaim, out var adminId))
+                return Unauthorized(new { message = "No se pudo identificar el administrador autenticado." });
+
+            try
+            {
+                var result = await _loanAppService.CreateLoanAsync(dto, adminId);
+                return StatusCode(201, result);
+            }
+            catch (HighRiskConflictException ex)
+            {
+                return Conflict(new
+                {
+                    message = ex.Message,
+                    riskType = ex.RiskType,
+                    currentDebt = ex.CurrentDebt,
+                    projectedDebt = ex.ProjectedDebt,
+                    averageDebt = ex.AverageDebt
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        [HttpPut("{id}/rate")]
+        [HttpPatch("{id}/rate")]
         public async Task<IActionResult> UpdateLoanRate(Guid id, [FromBody] UpdateLoanRateDto dto)
         {
             var (success, error) = await _loanAppService.UpdateLoanRateAsync(id, dto);
-            if (!success) return BadRequest(new { Error = error });
-            return Ok(new { Success = true });
+            if (!success) return BadRequest(new { message = error });
+            return NoContent();
         }
     }
 }

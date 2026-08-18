@@ -276,32 +276,35 @@ public class AdminController : Controller
     [HttpGet]
     public async Task<IActionResult> LoanManagement(string statusFilter = "Activos", string searchCedula = "", int page = 1)
     {
-        var domainStatus = statusFilter == "Activos" ? "Activo" : statusFilter == "Completados" ? "Completado" : null;
-        var loansDto = await _loanAppService.GetLoansAsync(domainStatus, searchCedula);
+        var apiStatus = statusFilter == "Activos" ? "activos" : statusFilter == "Completados" ? "completados" : "todos";
+        var result = await _loanAppService.GetLoansAsync(page, 20, apiStatus, string.IsNullOrEmpty(searchCedula) ? null : searchCedula);
 
-        const int pageSize = 20;
-        var totalRecords = loansDto.Count();
-        var totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
-        var pagedLoans = loansDto.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        var clientIds = result.Data.Select(l => l.ClientId).Distinct().ToList();
+        var clients = new Dictionary<Guid, ApplicationUser>();
+        foreach (var cid in clientIds)
+        {
+            var user = await _userManager.FindByIdAsync(cid.ToString());
+            if (user != null) clients[cid] = user;
+        }
 
         var loanList = new List<LoanViewModel>();
-        foreach (var l in pagedLoans)
+        foreach (var l in result.Data)
         {
-            var user = await _userManager.FindByIdAsync(l.ClientId.ToString());
+            clients.TryGetValue(l.ClientId, out var user);
             loanList.Add(new LoanViewModel
             {
                 Id = l.Id.ToString(),
                 LoanNumber = l.LoanNumber,
                 ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "Desconocido",
                 ClientCedula = user?.Cedula ?? "N/A",
-                ApprovedCapital = l.ApprovedAmount,
+                ApprovedCapital = l.CapitalAmount,
                 TotalInstallments = l.TotalInstallments,
                 PaidInstallments = l.PaidInstallments,
                 PendingAmount = l.PendingAmount,
                 InterestRate = l.AnnualInterestRate,
-                TermInMonths = l.Term,
-                LoanStatus = l.Status.ToString(),
-                ClientStatus = l.ClientStatus
+                TermInMonths = l.TermInMonths,
+                LoanStatus = l.Status,
+                ClientStatus = l.ClientPaymentStatus
             });
         }
 
@@ -326,9 +329,9 @@ public class AdminController : Controller
             Loans = filteredLoans,
             CurrentFilter = statusFilter,
             SearchCedula = searchCedula,
-            CurrentPage = page,
-            TotalPages = totalPages,
-            TotalRecords = totalRecords
+            CurrentPage = result.Page,
+            TotalPages = result.TotalPages,
+            TotalRecords = result.TotalRecords
         };
 
         return View(model);
@@ -349,7 +352,7 @@ public class AdminController : Controller
         }
 
         var (averageDebt, _) = await _loanAppService.GetAverageDebtAsync();
-        var allLoans = await _loanAppService.GetLoansAsync(null, "");
+        var allLoans = (await _loanAppService.GetAllLoansAsync()).ToList();
 
         var clients = new List<ClientSelectionViewModel>();
         foreach (var c in activeClients)
@@ -436,34 +439,34 @@ public class AdminController : Controller
         var dto = new CreateLoanDto
         {
             ClientId = clientGuid,
-            ApprovedAmount = model.Amount,
+            CapitalAmount = model.Amount,
             AnnualInterestRate = model.InterestRate,
-            Term = model.TermInMonths,
-            AdminId = adminId,
+            TermInMonths = model.TermInMonths,
             ConfirmHighRisk = false
         };
 
-        var result = await _loanAppService.CreateLoanAsync(dto);
-
-        if (!result.Success)
+        try
         {
-            if (result.IsHighRiskConflict)
+            await _loanAppService.CreateLoanAsync(dto, adminId);
+        }
+        catch (Application.Services.HighRiskConflictException ex)
+        {
+            var riskModel = new RiskAlertViewModel
             {
-                var riskModel = new RiskAlertViewModel
-                {
-                    ClientId = model.ClientId,
-                    CurrentDebt = result.CurrentDebt,
-                    ProjectedDebt = result.ProjectedDebt,
-                    SystemAverage = result.AverageDebt,
-                    Amount = model.Amount,
-                    InterestRate = model.InterestRate,
-                    TermInMonths = model.TermInMonths,
-                    WarningMessage = result.ErrorMessage ?? string.Empty
-                };
-                return View("RiskAlert", riskModel);
-            }
-
-            TempData["ErrorMessage"] = result.ErrorMessage;
+                ClientId = model.ClientId,
+                CurrentDebt = ex.CurrentDebt,
+                ProjectedDebt = ex.ProjectedDebt,
+                SystemAverage = ex.AverageDebt,
+                Amount = model.Amount,
+                InterestRate = model.InterestRate,
+                TermInMonths = model.TermInMonths,
+                WarningMessage = ex.Message
+            };
+            return View("RiskAlert", riskModel);
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["ErrorMessage"] = ex.Message;
             return View(model);
         }
 
@@ -495,18 +498,19 @@ public class AdminController : Controller
         var dto = new CreateLoanDto
         {
             ClientId = clientGuid,
-            ApprovedAmount = model.Amount,
+            CapitalAmount = model.Amount,
             AnnualInterestRate = model.InterestRate,
-            Term = model.TermInMonths,
-            AdminId = adminId,
+            TermInMonths = model.TermInMonths,
             ConfirmHighRisk = true
         };
 
-        var result = await _loanAppService.CreateLoanAsync(dto);
-
-        if (!result.Success)
+        try
         {
-            TempData["ErrorMessage"] = result.ErrorMessage;
+            await _loanAppService.CreateLoanAsync(dto, adminId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            TempData["ErrorMessage"] = ex.Message;
             return RedirectToAction(nameof(LoanManagement));
         }
 
@@ -523,32 +527,29 @@ public class AdminController : Controller
             TempData["ErrorMessage"] = "El préstamo seleccionado no existe.";
             return RedirectToAction(nameof(LoanManagement));
         }
-        
-        var user = await _userManager.FindByIdAsync(loan.ClientId.ToString());
-        var installments = await _loanAppService.GetInstallmentsAsync(id);
 
         var model = new LoanDetailsViewModel
         {
             LoanNumber = loan.LoanNumber,
-            ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "Desconocido",
-            ApprovedAmount = loan.ApprovedAmount,
+            ClientName = loan.ClientFullName,
+            ApprovedAmount = loan.CapitalAmount,
             InterestRate = loan.AnnualInterestRate,
-            TermInMonths = loan.Term,
+            TermInMonths = loan.TermInMonths,
             LoanStatus = loan.Status,
             PendingBalance = loan.PendingAmount,
-            MonthlyQuote = loan.ApprovedAmount / loan.Term,
+            MonthlyQuote = loan.MonthlyInstallment,
             StartDate = loan.CreatedAt,
             NextDueDate = DateTime.Now.AddMonths(1),
             PaymentProgress = 0,
-            AmortizationTable = installments.Select(i => new AmortizationRowViewModel {
+            AmortizationTable = loan.Amortization.Select(i => new AmortizationRowViewModel {
                 InstallmentNumber = i.InstallmentNumber,
                 DueDate = i.DueDate,
-                InstallmentValue = i.Amount,
+                InstallmentValue = i.InstallmentAmount,
                 InterestAmount = i.InterestAmount,
                 CapitalAmount = i.CapitalAmount,
-                PendingBalance = i.PendingBalance,
+                PendingBalance = i.PendingInstallmentAmount,
                 PaymentStatus = i.PaymentStatus,
-                IsOverdue = i.IsOverdue
+                IsOverdue = i.IsLate
             }).ToList()
         };
 

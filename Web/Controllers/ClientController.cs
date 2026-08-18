@@ -72,19 +72,19 @@ public class ClientController : Controller
         {
             var installments = await _loanService.GetInstallmentsAsync(l.Id);
             var paidCount = installments.Count(i => i.PaymentStatus == PaymentStatus.Pagada.ToString());
-            var pendingDebt = installments.Sum(i => i.PendingBalance);
-            var isMora = installments.Any(i => i.IsOverdue);
+            var pendingDebt = installments.Sum(i => i.PendingInstallmentAmount);
+            var isMora = installments.Any(i => i.IsLate);
 
             activeLoans.Add(new ClientLoanViewModel
             {
                 Id = l.Id.ToString(),
                 LoanNumber = l.LoanNumber,
                 PendingAmount = pendingDebt,
-                ApprovedAmount = l.ApprovedAmount,
-                TotalInstallments = l.Term,
+                ApprovedAmount = l.CapitalAmount,
+                TotalInstallments = l.TermInMonths,
                 PaidInstallments = paidCount,
                 InterestRate = l.AnnualInterestRate,
-                TermInMonths = l.Term,
+                TermInMonths = l.TermInMonths,
                 IsInMora = isMora
             });
         }
@@ -169,13 +169,13 @@ public class ClientController : Controller
             .Select(i => new AmortizationViewModel
             {
                 DueDate = i.DueDate,
-                InstallmentValue = i.Amount,
+                InstallmentValue = i.InstallmentAmount,
                 Status = i.PaymentStatus.ToString(),
-                IsOverdue = i.IsOverdue
+                IsOverdue = i.IsLate
             })
             .ToList();
 
-        var totalPending = rawInstallments.Sum(i => i.PendingBalance);
+        var totalPending = rawInstallments.Sum(i => i.PendingInstallmentAmount);
 
         var model = new ClientLoanDetailsViewModel
         {
@@ -826,19 +826,19 @@ public class ClientController : Controller
         {
             var installments = await _loanService.GetInstallmentsAsync(l.Id);
             var paidCount = installments.Count(i => i.PaymentStatus == PaymentStatus.Pagada.ToString());
-            var pendingDebt = installments.Sum(i => i.PendingBalance);
-            var isMora = installments.Any(i => i.IsOverdue);
+            var pendingDebt = installments.Sum(i => i.PendingInstallmentAmount);
+            var isMora = installments.Any(i => i.IsLate);
 
             activeLoans.Add(new ClientLoanViewModel
             {
                 Id = l.Id.ToString(),
                 LoanNumber = l.LoanNumber,
                 PendingAmount = pendingDebt,
-                ApprovedAmount = l.ApprovedAmount,
-                TotalInstallments = l.Term,
+                ApprovedAmount = l.CapitalAmount,
+                TotalInstallments = l.TermInMonths,
                 PaidInstallments = paidCount,
                 InterestRate = l.AnnualInterestRate,
-                TermInMonths = l.Term,
+                TermInMonths = l.TermInMonths,
                 IsInMora = isMora
             });
         }
