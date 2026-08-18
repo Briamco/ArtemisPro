@@ -46,8 +46,22 @@ public class AutoMapperProfile : Profile
             .ForMember(dest => dest.IsLate, opt => opt.MapFrom(src => src.IsOverdue));
 
         CreateMap<CreditCard, CreditCardDto>()
-            .ForMember(dest => dest.MaskedCardNumber, opt => opt.MapFrom(src => "****-****-****-" + src.CardNumber.Substring(src.CardNumber.Length - 4)))
-            .ForMember(dest => dest.ClientName, opt => opt.MapFrom(src => $"{src.Client.FirstName} {src.Client.LastName}"));
+            .ForMember(dest => dest.MaskedCardNumber, opt => opt.MapFrom(src => "**** **** **** " + src.CardNumber.Substring(src.CardNumber.Length - 4)))
+            .ForMember(dest => dest.LastFourDigits, opt => opt.MapFrom(src => src.CardNumber.Substring(src.CardNumber.Length - 4)))
+            .ForMember(dest => dest.ClientFullName, opt => opt.MapFrom(src => $"{src.Client.FirstName} {src.Client.LastName}"))
+            .ForMember(dest => dest.CreditLimit, opt => opt.MapFrom(src => src.Limit))
+            .ForMember(dest => dest.AvailableCredit, opt => opt.MapFrom(src => src.Limit - src.Debt))
+            .ForMember(dest => dest.CurrentDebt, opt => opt.MapFrom(src => src.Debt))
+            .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()));
+
+        CreateMap<CreditCard, CreditCardDetailDto>()
+            .ForMember(dest => dest.MaskedCardNumber, opt => opt.MapFrom(src => "**** **** **** " + src.CardNumber.Substring(src.CardNumber.Length - 4)))
+            .ForMember(dest => dest.LastFourDigits, opt => opt.MapFrom(src => src.CardNumber.Substring(src.CardNumber.Length - 4)))
+            .ForMember(dest => dest.ClientFullName, opt => opt.MapFrom(src => $"{src.Client.FirstName} {src.Client.LastName}"))
+            .ForMember(dest => dest.CreditLimit, opt => opt.MapFrom(src => src.Limit))
+            .ForMember(dest => dest.AvailableCredit, opt => opt.MapFrom(src => src.Limit - src.Debt))
+            .ForMember(dest => dest.CurrentDebt, opt => opt.MapFrom(src => src.Debt))
+            .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()));
 
         CreateMap<CreditCardTransaction, CreditCardTransactionDto>();
 

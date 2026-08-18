@@ -627,7 +627,7 @@ public class AdminController : Controller
             {
                 Id = c.Id.ToString(),
                 MaskedNumber = c.MaskedCardNumber,
-                ClientName = c.ClientName,
+                ClientName = c.ClientFullName,
                 ClientCedula = "", 
                 CreditLimit = c.Limit,
                 ExpirationDate = c.ExpirationDate,
@@ -740,7 +740,7 @@ public class AdminController : Controller
         var model = new CreditCardDetailsViewModel
         {
             MaskedNumber = card.MaskedCardNumber,
-            ClientName = card.ClientName,
+            ClientName = card.ClientFullName,
             ExpirationDate = card.ExpirationDate,
             Consumptions = txs.Select(t => new ConsumptionViewModel
             {

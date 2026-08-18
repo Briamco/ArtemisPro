@@ -33,59 +33,141 @@ public class CreditCardAppService : ICreditCardAppService
         _httpContextAccessor = httpContextAccessor;
     }
 
+    public async Task<PagedResultDto<CreditCardDto>> GetCreditCardsPagedAsync(int page, int pageSize, string? status, string? identification)
+    {
+        var allCards = (await _unitOfWork.CreditCards.GetAllAsync()).ToList();
+        var users = (await _unitOfWork.Users.GetAllAsync()).ToList();
+        var userDict = users.ToDictionary(u => u.Id);
+
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<CardStatus>(status, true, out var parsedStatus))
+            allCards = allCards.Where(c => c.Status == parsedStatus).ToList();
+
+        if (!string.IsNullOrEmpty(identification))
+        {
+            var user = await _unitOfWork.Users.GetByCedulaAsync(identification);
+            if (user != null)
+                allCards = allCards.Where(c => c.ClientId == user.Id).ToList();
+            else
+                return new PagedResultDto<CreditCardDto>();
+        }
+
+        var ordered = allCards.OrderByDescending(c => c.CreatedAt).ToList();
+        var totalRecords = ordered.Count;
+        var totalPages = (int)Math.Ceiling(totalRecords / (double)pageSize);
+        if (page < 1) page = 1;
+        var paged = ordered.Skip((page - 1) * pageSize).Take(pageSize);
+
+        return new PagedResultDto<CreditCardDto>
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalRecords = totalRecords,
+            TotalPages = totalPages,
+            Data = paged.Select(c => new CreditCardDto
+            {
+                Id = c.Id,
+                MaskedCardNumber = MaskCardNumber(c.CardNumber),
+                LastFourDigits = c.CardNumber.Length >= 4 ? c.CardNumber[^4..] : c.CardNumber,
+                ClientId = c.ClientId,
+                ClientFullName = userDict.ContainsKey(c.ClientId)
+                    ? $"{userDict[c.ClientId].FirstName} {userDict[c.ClientId].LastName}"
+                    : "",
+                CreditLimit = c.Limit,
+                AvailableCredit = c.Limit - c.Debt,
+                CurrentDebt = c.Debt,
+                ExpirationDate = c.ExpirationDate,
+                Status = c.Status.ToString(),
+                CreatedAt = c.CreatedAt
+            }).ToList()
+        };
+    }
+
+    public async Task<CreditCardDetailDto?> GetCreditCardDetailByIdAsync(Guid id)
+    {
+        var c = await _unitOfWork.CreditCards.GetByIdAsync(id);
+        if (c == null) return null;
+
+        var user = await _userManager.FindByIdAsync(c.ClientId.ToString());
+        var txs = await _unitOfWork.CreditCardTransactions.GetByCreditCardIdAsync(id);
+        var sortedTxs = txs.OrderByDescending(t => t.Date).ToList();
+
+        return new CreditCardDetailDto
+        {
+            Id = c.Id,
+            MaskedCardNumber = MaskCardNumber(c.CardNumber),
+            LastFourDigits = c.CardNumber.Length >= 4 ? c.CardNumber[^4..] : c.CardNumber,
+            ClientId = c.ClientId,
+            ClientFullName = user != null ? $"{user.FirstName} {user.LastName}" : "",
+            CreditLimit = c.Limit,
+            AvailableCredit = c.Limit - c.Debt,
+            CurrentDebt = c.Debt,
+            ExpirationDate = c.ExpirationDate,
+            Status = c.Status.ToString(),
+            CreatedAt = c.CreatedAt,
+            Consumptions = sortedTxs.Select(t => new CreditCardTransactionDto
+            {
+                Id = t.Id,
+                Amount = t.Amount,
+                MerchantName = t.MerchantName,
+                Status = t.Status.ToString(),
+                Date = t.Date
+            }).ToList()
+        };
+    }
+
     public async Task<IEnumerable<CreditCardDto>> GetCreditCardsAsync(string? status = null, string? cedula = null)
     {
         var cards = await _unitOfWork.CreditCards.GetAllAsync();
-        
+
         var users = await _unitOfWork.Users.GetAllAsync();
         var userDict = users.ToDictionary(u => u.Id);
 
         if (!string.IsNullOrEmpty(status) && Enum.TryParse<CardStatus>(status, true, out var parsedStatus))
-        {
             cards = cards.Where(c => c.Status == parsedStatus).ToList();
-        }
 
         if (!string.IsNullOrEmpty(cedula))
         {
             var user = await _unitOfWork.Users.GetByCedulaAsync(cedula);
             if (user != null)
-            {
                 cards = cards.Where(c => c.ClientId == user.Id).ToList();
-            }
             else
-            {
                 return new List<CreditCardDto>();
-            }
         }
 
         return cards.Select(c => new CreditCardDto
         {
             Id = c.Id,
             MaskedCardNumber = MaskCardNumber(c.CardNumber),
+            LastFourDigits = c.CardNumber.Length >= 4 ? c.CardNumber[^4..] : c.CardNumber,
             ClientId = c.ClientId,
-            ClientName = userDict.ContainsKey(c.ClientId) ? $"{userDict[c.ClientId].FirstName} {userDict[c.ClientId].LastName}" : "",
-            Limit = c.Limit,
-            Debt = c.Debt,
+            ClientFullName = userDict.ContainsKey(c.ClientId)
+                ? $"{userDict[c.ClientId].FirstName} {userDict[c.ClientId].LastName}"
+                : "",
+            CreditLimit = c.Limit,
+            AvailableCredit = c.Limit - c.Debt,
+            CurrentDebt = c.Debt,
             ExpirationDate = c.ExpirationDate,
             Status = c.Status.ToString(),
             CreatedAt = c.CreatedAt
-        }).OrderByDescending(c => c.Id);
+        }).OrderByDescending(c => c.CreatedAt);
     }
 
     public async Task<CreditCardDto?> GetCreditCardByIdAsync(Guid id)
     {
         var c = await _unitOfWork.CreditCards.GetByIdAsync(id);
         if (c == null) return null;
-        
+
         var user = await _userManager.FindByIdAsync(c.ClientId.ToString());
         return new CreditCardDto
         {
             Id = c.Id,
             MaskedCardNumber = MaskCardNumber(c.CardNumber),
+            LastFourDigits = c.CardNumber.Length >= 4 ? c.CardNumber[^4..] : c.CardNumber,
             ClientId = c.ClientId,
-            ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "",
-            Limit = c.Limit,
-            Debt = c.Debt,
+            ClientFullName = user != null ? $"{user.FirstName} {user.LastName}" : "",
+            CreditLimit = c.Limit,
+            AvailableCredit = c.Limit - c.Debt,
+            CurrentDebt = c.Debt,
             ExpirationDate = c.ExpirationDate,
             Status = c.Status.ToString(),
             CreatedAt = c.CreatedAt
@@ -105,12 +187,12 @@ public class CreditCardAppService : ICreditCardAppService
         }).OrderByDescending(t => t.Date);
     }
 
-    public async Task<(bool Success, string? Error)> AssignCreditCardAsync(AssignCreditCardDto dto)
+    public async Task<(bool Success, string? Error, CreditCardDto? Card)> AssignCreditCardAsync(AssignCreditCardDto dto)
     {
         var client = await _userManager.FindByIdAsync(dto.ClientId.ToString());
-        if (client == null) return (false, "Cliente no encontrado.");
-        if (!client.IsActive) return (false, "El cliente no está activo.");
-        if (dto.Limit <= 0) return (false, "El límite debe ser mayor a cero.");
+        if (client == null) return (false, "Cliente no encontrado.", null);
+        if (!client.IsActive) return (false, "El cliente no está activo.", null);
+        if (dto.Limit <= 0) return (false, "El límite debe ser mayor a cero.", null);
 
         string cardNumber;
         bool exists;
@@ -161,14 +243,29 @@ public class CreditCardAppService : ICreditCardAppService
         }
         catch { }
 
-        return (true, null);
+        var resultDto = new CreditCardDto
+        {
+            Id = card.Id,
+            MaskedCardNumber = MaskCardNumber(card.CardNumber),
+            LastFourDigits = card.CardNumber[^4..],
+            ClientId = card.ClientId,
+            ClientFullName = $"{client.FirstName} {client.LastName}",
+            CreditLimit = card.Limit,
+            AvailableCredit = card.Limit,
+            CurrentDebt = 0m,
+            ExpirationDate = card.ExpirationDate,
+            Status = card.Status.ToString(),
+            CreatedAt = card.CreatedAt
+        };
+
+        return (true, null, resultDto);
     }
 
     public async Task<(bool Success, string? Error)> UpdateCreditCardLimitAsync(Guid id, UpdateCreditCardLimitDto dto)
     {
         var card = await _unitOfWork.CreditCards.GetByIdAsync(id);
         if (card == null) return (false, "Tarjeta no encontrada.");
-        
+
         if (dto.NewLimit <= 0) return (false, "El límite debe ser mayor a cero.");
         if (dto.NewLimit < card.Debt) return (false, "El límite no puede ser menor a la deuda actual.");
 
@@ -214,18 +311,20 @@ public class CreditCardAppService : ICreditCardAppService
     {
         var cards = await _unitOfWork.CreditCards.GetByClientIdAsync(clientId);
         var user = await _userManager.FindByIdAsync(clientId.ToString());
-        
+
         return cards.Select(c => new CreditCardDto
         {
             Id = c.Id,
             MaskedCardNumber = MaskCardNumber(c.CardNumber),
+            LastFourDigits = c.CardNumber.Length >= 4 ? c.CardNumber[^4..] : c.CardNumber,
             ClientId = c.ClientId,
-            ClientName = user != null ? $"{user.FirstName} {user.LastName}" : "",
-            Limit = c.Limit,
-            Debt = c.Debt,
+            ClientFullName = user != null ? $"{user.FirstName} {user.LastName}" : "",
+            CreditLimit = c.Limit,
+            AvailableCredit = c.Limit - c.Debt,
+            CurrentDebt = c.Debt,
             ExpirationDate = c.ExpirationDate,
             Status = c.Status.ToString(),
             CreatedAt = c.CreatedAt
-        }).OrderByDescending(c => c.Id);
+        }).OrderByDescending(c => c.CreatedAt);
     }
 }

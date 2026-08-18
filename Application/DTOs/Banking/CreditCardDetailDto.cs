@@ -1,8 +1,9 @@
 using System;
+using System.Collections.Generic;
 
 namespace Application.DTOs.Banking;
 
-public class CreditCardDto
+public class CreditCardDetailDto
 {
     public Guid Id { get; set; }
     public string MaskedCardNumber { get; set; } = string.Empty;
@@ -15,9 +16,5 @@ public class CreditCardDto
     public string ExpirationDate { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
-
-    // Backward-compatible aliases used by the Web layer
-    public string ClientName { get => ClientFullName; set => ClientFullName = value; }
-    public decimal Limit { get => CreditLimit; set => CreditLimit = value; }
-    public decimal Debt { get => CurrentDebt; set => CurrentDebt = value; }
+    public IEnumerable<CreditCardTransactionDto> Consumptions { get; set; } = Array.Empty<CreditCardTransactionDto>();
 }
