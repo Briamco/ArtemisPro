@@ -7,6 +7,7 @@ namespace Application.Interfaces.Services;
 public interface ILoanAppService
 {
     Task<PagedResultDto<LoanDto>> GetLoansAsync(int page, int pageSize, string? status = null, string? identification = null);
+    Task<IEnumerable<LoanDto>> GetAllLoansAsync();
     Task<LoanDetailDto?> GetLoanByIdAsync(Guid id);
     Task<IEnumerable<LoanInstallmentDto>> GetInstallmentsAsync(Guid loanId);
     Task<LoanCreationResponseDto?> CreateLoanAsync(CreateLoanDto dto, Guid adminId);

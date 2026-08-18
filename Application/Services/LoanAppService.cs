@@ -46,17 +46,20 @@ public class LoanAppService : ILoanAppService
             query = query.Where(l => l.ClientId == user.Id);
         }
 
-        if (string.IsNullOrEmpty(status) || status.ToLower() == "activos")
+        if (!string.IsNullOrEmpty(status))
         {
-            query = query.Where(l => l.Status == LoanStatus.Activo);
-        }
-        else if (status.ToLower() == "completados")
-        {
-            query = query.Where(l => l.Status == LoanStatus.Completado);
-        }
-        else if (status.ToLower() != "todos")
-        {
-            return new PagedResultDto<LoanDto> { Page = page, PageSize = pageSize, TotalRecords = 0, TotalPages = 0, Data = Enumerable.Empty<LoanDto>() };
+            if (status.ToLower() == "activos")
+            {
+                query = query.Where(l => l.Status == LoanStatus.Activo);
+            }
+            else if (status.ToLower() == "completados")
+            {
+                query = query.Where(l => l.Status == LoanStatus.Completado);
+            }
+            else if (status.ToLower() != "todos")
+            {
+                return new PagedResultDto<LoanDto> { Page = page, PageSize = pageSize, TotalRecords = 0, TotalPages = 0, Data = Enumerable.Empty<LoanDto>() };
+            }
         }
 
         query = query.OrderByDescending(l => l.CreatedAt);
@@ -89,6 +92,16 @@ public class LoanAppService : ILoanAppService
         if (loan == null) return null;
 
         return _mapper.Map<LoanDetailDto>(loan);
+    }
+
+    public async Task<IEnumerable<LoanDto>> GetAllLoansAsync()
+    {
+        var loans = await _unitOfWork.Loans.Query()
+            .Include(l => l.Client)
+            .Include(l => l.Installments)
+            .ToListAsync();
+
+        return _mapper.Map<IEnumerable<LoanDto>>(loans);
     }
 
     public async Task<IEnumerable<LoanInstallmentDto>> GetInstallmentsAsync(Guid loanId)
@@ -262,6 +275,7 @@ public class LoanAppService : ILoanAppService
         }
         catch (Exception)
         {
+            // El fallo de envío de email no es crítico — el préstamo ya fue creado exitosamente.
         }
 
         return new LoanCreationResponseDto
@@ -379,6 +393,7 @@ public class LoanAppService : ILoanAppService
             }
             catch (Exception)
             {
+                // El fallo de envío de email no es crítico — la tasa ya fue actualizada exitosamente.
             }
         }
 
@@ -472,22 +487,5 @@ public class LoanAppService : ILoanAppService
         var loans = await loansQuery.ToListAsync();
         var clientLoans = loans.Where(l => l.ClientId == clientId);
         return _mapper.Map<IEnumerable<LoanDto>>(clientLoans);
-    }
-}
-
-public class HighRiskConflictException : Exception
-{
-    public string RiskType { get; }
-    public decimal CurrentDebt { get; }
-    public decimal ProjectedDebt { get; }
-    public decimal AverageDebt { get; }
-
-    public HighRiskConflictException(string riskType, decimal currentDebt, decimal projectedDebt, decimal averageDebt, string message)
-        : base(message)
-    {
-        RiskType = riskType;
-        CurrentDebt = currentDebt;
-        ProjectedDebt = projectedDebt;
-        AverageDebt = averageDebt;
     }
 }

@@ -42,6 +42,7 @@ public class AutoMapperProfile : Profile
         CreateMap<LoanInstallment, LoanAmortizationRowDto>()
             .ForMember(dest => dest.InstallmentAmount, opt => opt.MapFrom(src => src.Amount))
             .ForMember(dest => dest.PendingInstallmentAmount, opt => opt.MapFrom(src => src.PendingBalance))
+            .ForMember(dest => dest.PaymentStatus, opt => opt.MapFrom(src => src.PaymentStatus.ToString()))
             .ForMember(dest => dest.IsLate, opt => opt.MapFrom(src => src.IsOverdue));
 
         CreateMap<CreditCard, CreditCardDto>()

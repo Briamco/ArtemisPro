@@ -279,10 +279,18 @@ public class AdminController : Controller
         var apiStatus = statusFilter == "Activos" ? "activos" : statusFilter == "Completados" ? "completados" : "todos";
         var result = await _loanAppService.GetLoansAsync(page, 20, apiStatus, string.IsNullOrEmpty(searchCedula) ? null : searchCedula);
 
+        var clientIds = result.Data.Select(l => l.ClientId).Distinct().ToList();
+        var clients = new Dictionary<Guid, ApplicationUser>();
+        foreach (var cid in clientIds)
+        {
+            var user = await _userManager.FindByIdAsync(cid.ToString());
+            if (user != null) clients[cid] = user;
+        }
+
         var loanList = new List<LoanViewModel>();
         foreach (var l in result.Data)
         {
-            var user = await _userManager.FindByIdAsync(l.ClientId.ToString());
+            clients.TryGetValue(l.ClientId, out var user);
             loanList.Add(new LoanViewModel
             {
                 Id = l.Id.ToString(),
@@ -344,8 +352,7 @@ public class AdminController : Controller
         }
 
         var (averageDebt, _) = await _loanAppService.GetAverageDebtAsync();
-        var allLoansResult = await _loanAppService.GetLoansAsync(1, 100, "todos", null);
-        var allLoans = allLoansResult.Data.ToList();
+        var allLoans = (await _loanAppService.GetAllLoansAsync()).ToList();
 
         var clients = new List<ClientSelectionViewModel>();
         foreach (var c in activeClients)
