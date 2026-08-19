@@ -1,7 +1,8 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Application.DTOs.Identity;
-using Application.Interfaces.Services;
+using Application.Features.Account.Commands;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
@@ -11,11 +12,11 @@ namespace Api.Controllers;
 [Route("api/[controller]")]
 public class AccountController : ControllerBase
 {
-    private readonly IAuthAppService _authService;
+    private readonly ISender _sender;
 
-    public AccountController(IAuthAppService authService)
+    public AccountController(ISender sender)
     {
-        _authService = authService;
+        _sender = sender;
     }
 
     [HttpPost("login")]
@@ -24,7 +25,7 @@ public class AccountController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var result = await _authService.ApiLoginAsync(dto);
+        var result = await _sender.Send(new LoginCommand(dto));
         if (result.Succeeded)
             return Ok(new { jwt = result.Token, token = result.Token, expires = result.Expires });
 
@@ -40,7 +41,7 @@ public class AccountController : ControllerBase
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(dto.Token))
             return BadRequest(new { message = "El token es obligatorio y debe ser válido." });
 
-        var result = await _authService.ConfirmAccountByTokenAsync(dto.Token);
+        var result = await _sender.Send(new ConfirmAccountCommand(dto.Token));
         if (result.Succeeded)
             return NoContent();
 
@@ -54,7 +55,7 @@ public class AccountController : ControllerBase
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(dto.UserName))
             return BadRequest(new { message = "El nombre de usuario es obligatorio." });
 
-        var (succeeded, errorMessage) = await _authService.GetResetTokenApiAsync(dto.UserName);
+        var (succeeded, errorMessage) = await _sender.Send(new GetResetTokenCommand(dto.UserName));
         if (succeeded)
             return NoContent();
 
@@ -70,7 +71,7 @@ public class AccountController : ControllerBase
         if (dto.Password != dto.ConfirmPassword)
             return BadRequest(new { message = "La contraseña y la confirmación de contraseña deben coincidir." });
 
-        var result = await _authService.ResetPasswordApiAsync(dto.UserId, dto.Token, dto.Password, dto.ConfirmPassword);
+        var result = await _sender.Send(new ResetPasswordCommand(dto.UserId, dto.Token, dto.Password, dto.ConfirmPassword));
         if (result.Succeeded)
             return NoContent();
 

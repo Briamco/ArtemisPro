@@ -2,7 +2,9 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Application.DTOs.Banking;
-using Application.Interfaces.Services;
+using Application.Features.Commerce.Commands;
+using Application.Features.Commerce.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,11 +15,11 @@ namespace Api.Controllers;
 [Authorize(Roles = "Administrador")]
 public class CommerceController : ControllerBase
 {
-    private readonly ICommerceAppService _commerceAppService;
+    private readonly ISender _sender;
 
-    public CommerceController(ICommerceAppService commerceAppService)
+    public CommerceController(ISender sender)
     {
-        _commerceAppService = commerceAppService;
+        _sender = sender;
     }
 
     [HttpGet]
@@ -36,14 +38,14 @@ public class CommerceController : ControllerBase
                 return BadRequest(new { message = "El estado filtrado solo puede ser activo, inactivo o todos." });
         }
 
-        var result = await _commerceAppService.GetCommercesPagedAsync(page, pageSize, status);
+        var result = await _sender.Send(new GetCommercesPagedQuery(page, pageSize, status));
         return Ok(result);
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetCommerceById(Guid id)
     {
-        var result = await _commerceAppService.GetCommerceByIdAsync(id);
+        var result = await _sender.Send(new GetCommerceByIdQuery(id));
         if (result == null)
             return NotFound(new { message = "El comercio indicado no existe." });
 
@@ -61,7 +63,7 @@ public class CommerceController : ControllerBase
         if (!string.IsNullOrEmpty(adminIdClaim) && Guid.TryParse(adminIdClaim, out var parsedAdminId))
             adminId = parsedAdminId;
 
-        var (success, errorCode, errorMessage, commerce) = await _commerceAppService.CreateCommerceAsync(dto, adminId);
+        var (success, errorCode, errorMessage, commerce) = await _sender.Send(new CreateCommerceCommand(dto, adminId));
         if (!success)
         {
             if (errorCode == "Conflict")
@@ -78,7 +80,7 @@ public class CommerceController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var (success, errorCode, errorMessage) = await _commerceAppService.UpdateCommerceAsync(id, dto);
+        var (success, errorCode, errorMessage) = await _sender.Send(new UpdateCommerceCommand(id, dto));
         if (!success)
         {
             if (errorCode == "NotFound")
@@ -97,7 +99,7 @@ public class CommerceController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var (success, errorCode, errorMessage) = await _commerceAppService.UpdateCommerceStatusAsync(id, dto.Status);
+        var (success, errorCode, errorMessage) = await _sender.Send(new UpdateCommerceStatusCommand(id, dto.Status));
         if (!success)
         {
             if (errorCode == "NotFound")

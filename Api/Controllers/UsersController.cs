@@ -2,7 +2,9 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Application.DTOs.Identity;
-using Application.Interfaces.Services;
+using Application.Features.Users.Commands;
+using Application.Features.Users.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,11 +15,11 @@ namespace Api.Controllers;
 [Authorize(Roles = "Administrador")]
 public class UsersController : ControllerBase
 {
-    private readonly IUserAppService _userAppService;
+    private readonly ISender _sender;
 
-    public UsersController(IUserAppService userAppService)
+    public UsersController(ISender sender)
     {
-        _userAppService = userAppService;
+        _sender = sender;
     }
 
     [HttpGet]
@@ -36,7 +38,7 @@ public class UsersController : ControllerBase
                 return BadRequest(new { message = "El rol filtrado solo puede ser administrador, cajero o cliente." });
         }
 
-        var result = await _userAppService.GetUsersPagedApiAsync(page, pageSize, role);
+        var result = await _sender.Send(new GetUsersPagedQuery(page, pageSize, role));
         return Ok(result);
     }
 
@@ -48,7 +50,7 @@ public class UsersController : ControllerBase
         if (page < 1 || pageSize < 1)
             return BadRequest(new { message = "Los parámetros de paginación deben ser mayores que cero." });
 
-        var result = await _userAppService.GetCommerceUsersPagedApiAsync(page, pageSize);
+        var result = await _sender.Send(new GetCommerceUsersPagedQuery(page, pageSize));
         return Ok(result);
     }
 
@@ -58,7 +60,7 @@ public class UsersController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var (success, errorCode, errorMessage, user) = await _userAppService.CreateUserApiAsync(dto);
+        var (success, errorCode, errorMessage, user) = await _sender.Send(new CreateUserCommand(dto));
         if (!success)
         {
             if (errorCode == "Conflict")
@@ -75,7 +77,7 @@ public class UsersController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var (success, errorCode, errorMessage, user) = await _userAppService.CreateCommerceUserApiAsync(commerceId, dto);
+        var (success, errorCode, errorMessage, user) = await _sender.Send(new CreateCommerceUserCommand(commerceId, dto));
         if (!success)
         {
             if (errorCode == "NotFound")
@@ -94,7 +96,7 @@ public class UsersController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var (success, errorCode, errorMessage) = await _userAppService.UpdateUserApiAsync(id, dto);
+        var (success, errorCode, errorMessage) = await _sender.Send(new UpdateUserCommand(id, dto));
         if (!success)
         {
             if (errorCode == "NotFound")
@@ -118,7 +120,7 @@ public class UsersController : ControllerBase
         if (!string.IsNullOrEmpty(adminIdClaim))
             Guid.TryParse(adminIdClaim, out adminId);
 
-        var (success, errorCode, errorMessage) = await _userAppService.UpdateUserStatusApiAsync(id, dto.Status, adminId);
+        var (success, errorCode, errorMessage) = await _sender.Send(new UpdateUserStatusCommand(id, dto.Status, adminId));
         if (!success)
         {
             if (errorCode == "Forbidden")
@@ -134,7 +136,7 @@ public class UsersController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetUserDetail(Guid id)
     {
-        var user = await _userAppService.GetUserDetailApiAsync(id);
+        var user = await _sender.Send(new GetUserDetailQuery(id));
         if (user == null)
             return NotFound(new { message = "El usuario indicado no existe." });
 

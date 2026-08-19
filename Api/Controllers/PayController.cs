@@ -2,8 +2,10 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Application.DTOs.Banking;
-using Application.Interfaces.Services;
+using Application.Features.HermesPay.Commands;
+using Application.Features.HermesPay.Queries;
 using Domain.Entities;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -16,12 +18,12 @@ namespace Api.Controllers;
 [Authorize(Roles = "Administrador,Comercio")]
 public class PayController : ControllerBase
 {
-    private readonly IHermesPayAppService _hermesPayAppService;
+    private readonly ISender _sender;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public PayController(IHermesPayAppService hermesPayAppService, UserManager<ApplicationUser> userManager)
+    public PayController(ISender sender, UserManager<ApplicationUser> userManager)
     {
-        _hermesPayAppService = hermesPayAppService;
+        _sender = sender;
         _userManager = userManager;
     }
 
@@ -38,7 +40,7 @@ public class PayController : ControllerBase
         if (!targetCommerceId.HasValue)
             return StatusCode(403, new { message = "Acceso denegado. El usuario no tiene un comercio asociado." });
 
-        var (success, errorCode, errorMessage, result) = await _hermesPayAppService.GetCommerceTransactionsAsync(targetCommerceId.Value, page, pageSize);
+        var (success, errorCode, errorMessage, result) = await _sender.Send(new GetCommerceTransactionsQuery(targetCommerceId.Value, page, pageSize));
         if (!success)
         {
             if (errorCode == "NotFound")
@@ -61,7 +63,7 @@ public class PayController : ControllerBase
         if (!targetCommerceId.HasValue)
             return StatusCode(403, new { message = "Acceso denegado. El usuario no tiene un comercio asociado." });
 
-        var (success, errorCode, errorMessage) = await _hermesPayAppService.ProcessPaymentAsync(targetCommerceId.Value, dto);
+        var (success, errorCode, errorMessage) = await _sender.Send(new ProcessPaymentCommand(targetCommerceId.Value, dto));
         if (!success)
         {
             if (errorCode == "NotFound")

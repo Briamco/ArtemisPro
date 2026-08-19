@@ -2,7 +2,9 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Application.DTOs.Banking;
-using Application.Interfaces.Services;
+using Application.Features.SavingsAccounts.Commands;
+using Application.Features.SavingsAccounts.Queries;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,11 +16,11 @@ namespace Api.Controllers;
 [Authorize(Roles = "Administrador")]
 public class SavingsAccountController : ControllerBase
 {
-    private readonly ISavingsAccountAppService _savingsAccountAppService;
+    private readonly ISender _sender;
 
-    public SavingsAccountController(ISavingsAccountAppService savingsAccountAppService)
+    public SavingsAccountController(ISender sender)
     {
-        _savingsAccountAppService = savingsAccountAppService;
+        _sender = sender;
     }
 
     [HttpGet]
@@ -46,7 +48,7 @@ public class SavingsAccountController : ControllerBase
                 return BadRequest(new { message = "El tipo filtrado solo puede ser principal, secundaria o todas." });
         }
 
-        var result = await _savingsAccountAppService.GetSavingsAccountsPagedApiAsync(page, pageSize, status, type, identification);
+        var result = await _sender.Send(new GetSavingsAccountsPagedQuery(page, pageSize, status, type, identification));
         return Ok(result);
     }
 
@@ -61,7 +63,7 @@ public class SavingsAccountController : ControllerBase
         if (!string.IsNullOrEmpty(adminIdClaim) && Guid.TryParse(adminIdClaim, out var parsedAdminId))
             adminId = parsedAdminId;
 
-        var (success, errorCode, errorMessage, account) = await _savingsAccountAppService.CreateSavingsAccountApiAsync(dto, adminId);
+        var (success, errorCode, errorMessage, account) = await _sender.Send(new CreateSavingsAccountCommand(dto, adminId));
         if (!success)
         {
             if (errorCode == "NotFound")
@@ -81,7 +83,7 @@ public class SavingsAccountController : ControllerBase
         if (page < 1 || pageSize < 1)
             return BadRequest(new { message = "Los parámetros de paginación deben ser mayores que cero." });
 
-        var result = await _savingsAccountAppService.GetAccountTransactionsApiAsync(accountNumber, page, pageSize);
+        var result = await _sender.Send(new GetSavingsAccountTransactionsQuery(accountNumber, page, pageSize));
         if (result == null)
             return NotFound(new { message = "La cuenta indicada no existe." });
 
@@ -91,7 +93,7 @@ public class SavingsAccountController : ControllerBase
     [HttpPatch("{accountNumber}/cancel")]
     public async Task<IActionResult> CancelSavingsAccount(string accountNumber)
     {
-        var (success, errorCode, errorMessage) = await _savingsAccountAppService.CancelSavingsAccountApiAsync(accountNumber);
+        var (success, errorCode, errorMessage) = await _sender.Send(new CancelSavingsAccountCommand(accountNumber));
         if (!success)
         {
             if (errorCode == "NotFound")
