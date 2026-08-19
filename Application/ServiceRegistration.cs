@@ -24,6 +24,7 @@ public static class ServiceRegistration
         services.AddScoped<ILoanPaymentAppService, Application.Services.Banking.LoanPaymentAppService>();
         services.AddScoped<IThirdPartyTransactionAppService, Application.Services.Banking.ThirdPartyTransactionAppService>();
         services.AddScoped<ICashierDashboardAppService, CashierDashboardAppService>();
+        services.AddScoped<ICommerceAppService, Application.Services.Banking.CommerceAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
         return services;
     }
