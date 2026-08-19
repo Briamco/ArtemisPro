@@ -16,6 +16,20 @@ public class MerchantConfiguration : IEntityTypeConfiguration<Merchant>
             .IsRequired()
             .HasMaxLength(200);
 
+        builder.Property(m => m.Description)
+            .HasMaxLength(500);
+
+        builder.Property(m => m.Email)
+            .IsRequired()
+            .HasMaxLength(200);
+
+        builder.HasIndex(m => m.Email)
+            .IsUnique();
+
+        builder.Property(m => m.PhoneNumber)
+            .IsRequired()
+            .HasMaxLength(50);
+
         builder.Property(m => m.RNC)
             .IsRequired()
             .HasMaxLength(20);
@@ -26,5 +40,10 @@ public class MerchantConfiguration : IEntityTypeConfiguration<Merchant>
         builder.Property(m => m.Status)
             .HasConversion<string>()
             .HasMaxLength(20);
+
+        builder.HasMany(m => m.Users)
+            .WithOne(u => u.Merchant)
+            .HasForeignKey(u => u.MerchantId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

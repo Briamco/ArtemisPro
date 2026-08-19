@@ -1,6 +1,7 @@
 using Application.Interfaces.Services;
 using Application.Mappings;
 using Application.Services;
+using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Application;
@@ -24,7 +25,18 @@ public static class ServiceRegistration
         services.AddScoped<ILoanPaymentAppService, Application.Services.Banking.LoanPaymentAppService>();
         services.AddScoped<IThirdPartyTransactionAppService, Application.Services.Banking.ThirdPartyTransactionAppService>();
         services.AddScoped<ICashierDashboardAppService, CashierDashboardAppService>();
+        services.AddScoped<ICommerceAppService, Application.Services.Banking.CommerceAppService>();
+        services.AddScoped<IHermesPayAppService, Application.Services.Banking.HermesPayAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
+
+        services.AddMediatR(cfg =>
+        {
+            cfg.RegisterServicesFromAssembly(typeof(ServiceRegistration).Assembly);
+            cfg.AddBehavior(typeof(MediatR.IPipelineBehavior<,>), typeof(Application.Behaviors.ValidationBehavior<,>));
+        });
+
+        services.AddValidatorsFromAssembly(typeof(ServiceRegistration).Assembly);
+
         return services;
     }
 }

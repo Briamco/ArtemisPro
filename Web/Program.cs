@@ -5,6 +5,15 @@ using Persistence.Contexts;
 using Shared;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "ArtemisPro.Web")
+    .WriteTo.Console()
+    .WriteTo.File("logs/artemis-web-.log", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
 
 try
 {
@@ -32,6 +41,7 @@ if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DB_CONNECTION_
 }
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 // Configuration from .env
 builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");

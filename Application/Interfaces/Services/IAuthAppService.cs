@@ -17,4 +17,7 @@ public interface IAuthAppService
     Task<ForgotPasswordResult> ForgotPasswordAsync(string userName, string resetPasswordLinkFormat);
     Task<bool> ResendActivationEmailAsync(string userName, string confirmationLinkFormat);
     Task<IdentityResult> ResetPasswordAsync(string email, string token, string newPassword);
+    Task<IdentityResult> ConfirmAccountByTokenAsync(string token);
+    Task<(bool Succeeded, string? ErrorMessage)> GetResetTokenApiAsync(string userName);
+    Task<IdentityResult> ResetPasswordApiAsync(string userId, string token, string newPassword, string confirmPassword);
 }
