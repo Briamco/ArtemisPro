@@ -9,6 +9,15 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "ArtemisPro.Api")
+    .WriteTo.Console()
+    .WriteTo.File("logs/artemis-api-.log", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
 
 try
 {
@@ -36,6 +45,7 @@ if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DB_CONNECTION_
 }
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 // Configuration from .env
 builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
@@ -181,6 +191,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<Api.Middlewares.ProblemDetailsMiddleware>();
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
