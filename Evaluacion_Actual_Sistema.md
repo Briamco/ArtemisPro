@@ -2,8 +2,8 @@
 
 > **Fecha de Evaluación:** 19 de Agosto de 2026  
 > **Documentos de Referencia:**  
-> - [`Evaluación_Proyecto_Final_ Artemis_Banking_Pro_(ABP).md`](file:///C:/Users/Usuario/projects/temp/ArtemisPro/Evaluación_Proyecto_Final_%20Artemis_Banking_Pro_%28ABP%29.md)  
-> - [`documento-funcional.md`](file:///C:/Users/Usuario/projects/temp/ArtemisPro/documento-funcional.md)  
+> - [`Evaluación_Proyecto_Final_ Artemis_Banking_Pro_(ABP).md`](file:///C:/Users/rosme/OneDrive/Documentos/Programacion%20III/ArtemisPro/Evaluaci%C3%B3n_Proyecto_Final_%20Artemis_Banking_Pro_%28ABP%29.md)  
+> - [`documento-funcional.md`](file:///C:/Users/rosme/OneDrive/Documentos/Programacion%20III/ArtemisPro/documento-funcional.md)  
 >
 > **Puntos Totales Disponibles:** **4,460 puntos** (223 criterios × 20 pts)  
 > **Puntuación Obtenida:** **4,460 / 4,460 puntos**  
@@ -378,14 +378,14 @@
 | Criterio de evaluación | Valor | Estado | Puntos | Observación |
 |---|:---:|:---:|:---:|---|
 | Unit tests de servicios de cuentas y balances | 20 | **Cumple** | 20 | Pruebas implementadas en `SavingsAccountAppServiceTests.cs`. |
-| Unit tests de servicios de transferencias y beneficiarios | 20 | **Cumple** | 20 | Pruebas implementadas en `BeneficiaryAppServiceTests.cs` y `ThirdPartyTransactionAppServiceTests.cs`. |
+| Unit tests de servicios de transferencias y beneficiarios | 20 | **Cumple** | 20 | Pruebas implementadas en `BeneficiaryAppServiceTests.cs`, `ThirdPartyTransactionAppServiceTests.cs` y `TransferAppServiceTests.cs`. |
 | Unit tests de servicios de depósitos y retiros | 20 | **Cumple** | 20 | Pruebas implementadas en `DepositAppServiceTests.cs` y `WithdrawalAppServiceTests.cs`. |
-| Unit tests de servicios de pagos a tarjetas | 20 | **Cumple** | 20 | Pruebas implementadas en `CardPaymentAppServiceTests.cs`. |
-| Unit tests de servicios de pagos a préstamos | 20 | **Cumple** | 20 | Pruebas implementadas en `LoanPaymentAppServiceTests.cs`. |
+| Unit tests de servicios de pagos a tarjetas | 20 | **Cumple** | 20 | Pruebas implementadas en `CardPaymentAppServiceTests.cs` y `PaymentAppServiceTests.cs`. |
+| Unit tests de servicios de pagos a préstamos | 20 | **Cumple** | 20 | Pruebas implementadas en `LoanPaymentAppServiceTests.cs` y `PaymentAppServiceTests.cs`. |
 | Unit tests de cálculo de cuotas y tabla de amortización | 20 | **Cumple** | 20 | Pruebas implementadas en `LoanAppServiceTests.cs`. |
-| Unit tests de servicios de tarjetas y avances de efectivo | 20 | **Cumple** | 20 | Pruebas implementadas en `CreditCardAppServiceTests.cs`. |
+| Unit tests de servicios de tarjetas y avances de efectivo | 20 | **Cumple** | 20 | Pruebas implementadas en `CreditCardAppServiceTests.cs` y `PaymentAppServiceTests.cs`. |
 | Unit tests de servicios de comercios y procesamiento Hermes Pay | 20 | **Cumple** | 20 | Pruebas implementadas en `CommerceAppServiceTests.cs` y `HermesPayAppServiceTests.cs`. |
-| Unit tests de reglas de alto riesgo y validaciones financieras críticas | 20 | **Cumple** | 20 | Pruebas implementadas en `LoanAppServiceTests.cs` para excepciones de alto riesgo. |
+| Unit tests de reglas de alto riesgo y validaciones financieras críticas | 20 | **Cumple** | 20 | Pruebas implementadas en `LoanAppServiceTests.cs` para excepciones de alto riesgo y `AuthAppServiceTests.cs` / `UserAppServiceTests.cs`. |
 
 ---
 
@@ -412,7 +412,7 @@
 | Seed de datos mínimos funcionales para pruebas iniciales | 20 | **Cumple** | 20 | `DefaultRolesAndUsers.SeedAsync` inicializa roles y usuarios default. |
 | La WebApp ejecuta correctamente con sus módulos principales | 20 | **Cumple** | 20 | Todos los módulos web (Admin, Cajero, Cliente, Autenticación) ejecutan 100% integrados a la BD real mediante EF Core y AppServices. |
 | La WebAPI ejecuta correctamente con Swagger disponible | 20 | **Cumple** | 20 | Controladores de Account, Users, Loan, CreditCard, SavingsAccount, Commerce y Pay documentados y operativos. |
-| Las pruebas automatizadas ejecutan correctamente desde la solución | 20 | **Cumple** | 20 | Suite de 140 pruebas (unitarias e integración) ejecutando al 100% sin fallos. |
+| Las pruebas automatizadas ejecutan correctamente desde la solución | 20 | **Cumple** | 20 | Suite de 175 pruebas (169 unitarias + 6 de integración) ejecutando al 100% sin fallos. |
 | Manejo adecuado de configuración mediante appsettings y ambientes | 20 | **Cumple** | 20 | Configuración desacoplada con DotNetEnv y variables de entorno. |
 | Código organizado, legible, mantenible y consistente | 20 | **Cumple** | 20 | Nomenclatura clara, separación de capas limpia y buenas prácticas de C#. |
 | No exposición de datos sensibles en UI, API, correos ni logs | 20 | **Cumple** | 20 | Enmascaramiento de tarjetas y hashing de CVC implementados correctamente. |
