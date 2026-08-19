@@ -25,6 +25,7 @@ public static class ServiceRegistration
         services.AddScoped<IThirdPartyTransactionAppService, Application.Services.Banking.ThirdPartyTransactionAppService>();
         services.AddScoped<ICashierDashboardAppService, CashierDashboardAppService>();
         services.AddScoped<ICommerceAppService, Application.Services.Banking.CommerceAppService>();
+        services.AddScoped<IHermesPayAppService, Application.Services.Banking.HermesPayAppService>();
         services.AddAutoMapper(typeof(AutoMapperProfile).Assembly);
         return services;
     }
