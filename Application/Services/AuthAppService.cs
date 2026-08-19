@@ -26,12 +26,8 @@ public class AuthAppService(
     public async Task<IdentityResult> RegisterAsync(CreateUserDto createUserDto, string confirmationLinkFormat, bool isApiUser = false)
     {
         var user = mapper.Map<ApplicationUser>(createUserDto);
-
-        if (isApiUser)
-        {
-            user.IsActive = true;
-            user.EmailConfirmed = true;
-        }
+        user.IsActive = false;
+        user.EmailConfirmed = false;
 
         var result = await userManager.CreateAsync(user, createUserDto.Password);
         if (!result.Succeeded)
@@ -42,15 +38,31 @@ public class AuthAppService(
             await userManager.AddToRoleAsync(user, createUserDto.Role);
         }
 
-        if (isApiUser)
-            return result;
-
         var rawToken = await userManager.GenerateEmailConfirmationTokenAsync(user);
+
+        if (isApiUser)
+        {
+            var compoundToken = $"{user.Id}:{rawToken}";
+            var apiToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(compoundToken));
+
+            var subject = "Token de activación de cuenta";
+            var body = $"""
+                <p>Hola {user.FirstName},</p>
+                <p>Su cuenta ha sido creada correctamente en Artemis Banking.</p>
+                <p>Utilice el siguiente token para activar su cuenta desde el endpoint correspondiente:</p>
+                <p><strong>{apiToken}</strong></p>
+                <p>Si usted no esperaba la creación de esta cuenta, ignore este mensaje.</p>
+                """;
+
+            await emailService.SendAsync(user.Email!, subject, body);
+            return result;
+        }
+
         var safeToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(rawToken));
         var confirmationLink = string.Format(confirmationLinkFormat, Uri.EscapeDataString(user.Email!), safeToken);
 
-        var subject = "Activa tu cuenta - Artemis Banking Pro";
-        var body = $"""
+        var webSubject = "Activa tu cuenta - Artemis Banking Pro";
+        var webBody = $"""
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e1e4e6; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
                 <div style="background-color: #1a237e; padding: 20px; text-align: center;">
                     <h1 style="color: white; margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">Artemis Banking Pro</h1>
@@ -71,8 +83,7 @@ public class AuthAppService(
             </div>
             """;
 
-        await emailService.SendAsync(user.Email!, subject, body);
-
+        await emailService.SendAsync(user.Email!, webSubject, webBody);
         return result;
     }
 
@@ -130,12 +141,12 @@ public class AuthAppService(
             return new ApiLoginResult { ErrorMessage = "Los datos de acceso son inválidos." };
 
         if (!user.IsActive)
-            return new ApiLoginResult { ErrorMessage = "Su cuenta se encuentra inactiva." };
+            return new ApiLoginResult { ErrorMessage = "Su cuenta se encuentra inactiva. Debe activar su cuenta antes de iniciar sesión." };
 
         var roles = await userManager.GetRolesAsync(user);
-        var allowedRoles = new[] { "Administrador", "Cajero", "Comercio" };
+        var allowedRoles = new[] { "Administrador", "Comercio" };
         if (!roles.Any(r => allowedRoles.Contains(r)))
-            return new ApiLoginResult { ErrorMessage = "Este usuario no tiene permisos para acceder a la API." };
+            return new ApiLoginResult { ErrorMessage = "Acceso denegado. No tiene permisos para utilizar este recurso." };
 
         var result = await signInManager.CheckPasswordSignInAsync(user, dto.Password, false);
         if (!result.Succeeded)
@@ -336,6 +347,150 @@ public class AuthAppService(
         catch
         {
             return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El enlace de restablecimiento no es válido." });
+        }
+    }
+
+    public async Task<IdentityResult> ConfirmAccountByTokenAsync(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token es obligatorio." });
+
+        try
+        {
+            var decodedBytes = WebEncoders.Base64UrlDecode(token);
+            var decodedString = Encoding.UTF8.GetString(decodedBytes);
+
+            string rawToken;
+            ApplicationUser? user = null;
+
+            if (decodedString.Contains(':'))
+            {
+                var parts = decodedString.Split(':', 2);
+                if (Guid.TryParse(parts[0], out var userId))
+                {
+                    user = await userManager.FindByIdAsync(userId.ToString());
+                }
+                rawToken = parts[1];
+            }
+            else
+            {
+                rawToken = decodedString;
+            }
+
+            if (user == null)
+            {
+                return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token no es válido o el usuario no existe." });
+            }
+
+            if (user.IsActive && user.EmailConfirmed)
+            {
+                return IdentityResult.Failed(new IdentityError { Code = "TokenAlreadyUsed", Description = "Este token ya fue utilizado." });
+            }
+
+            var result = await userManager.ConfirmEmailAsync(user, rawToken);
+            if (result.Succeeded)
+            {
+                user.IsActive = true;
+                user.UpdatedAt = DateTime.UtcNow;
+                await userManager.UpdateAsync(user);
+                return result;
+            }
+
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token no es válido o ya fue utilizado." });
+        }
+        catch
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token no es válido." });
+        }
+    }
+
+    public async Task<(bool Succeeded, string? ErrorMessage)> GetResetTokenApiAsync(string userName)
+    {
+        if (string.IsNullOrWhiteSpace(userName))
+            return (false, "El nombre de usuario es obligatorio.");
+
+        var user = await userManager.FindByNameAsync(userName);
+        user ??= await userManager.FindByEmailAsync(userName);
+
+        if (user == null)
+            return (false, "No existe un usuario registrado con este nombre de usuario.");
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+            return (false, "Este usuario no tiene un correo electrónico registrado.");
+
+        var roles = await userManager.GetRolesAsync(user);
+        var allowedRoles = new[] { "Administrador", "Comercio" };
+        if (!roles.Any(r => allowedRoles.Contains(r)))
+            return (false, "El usuario no pertenece a un rol permitido para la API.");
+
+        user.IsActive = false;
+        user.UpdatedAt = DateTime.UtcNow;
+        await userManager.UpdateAsync(user);
+
+        var rawToken = await userManager.GeneratePasswordResetTokenAsync(user);
+        var compoundToken = $"{user.Id}:{rawToken}";
+        var apiToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(compoundToken));
+
+        var subject = "Token de restablecimiento de contraseña";
+        var body = $"""
+            <p>Hola {user.FirstName},</p>
+            <p>Se ha generado un token para restablecer la contraseña de su cuenta.</p>
+            <p>Token de restablecimiento:</p>
+            <p><strong>{apiToken}</strong></p>
+            <p>Utilice este token en el endpoint correspondiente para completar el cambio de contraseña.</p>
+            <p>Si usted no solicitó este cambio, ignore este mensaje.</p>
+            """;
+
+        await emailService.SendAsync(user.Email, subject, body);
+        return (true, null);
+    }
+
+    public async Task<IdentityResult> ResetPasswordApiAsync(string userId, string token, string newPassword, string confirmPassword)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(newPassword))
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidRequest", Description = "Faltan campos requeridos." });
+
+        if (newPassword != confirmPassword)
+            return IdentityResult.Failed(new IdentityError { Code = "PasswordMismatch", Description = "La contraseña y la confirmación de contraseña deben coincidir." });
+
+        var user = await userManager.FindByIdAsync(userId);
+        if (user == null)
+            return IdentityResult.Failed(new IdentityError { Code = "UserNotFound", Description = "El usuario no existe." });
+
+        try
+        {
+            var decodedBytes = WebEncoders.Base64UrlDecode(token);
+            var decodedString = Encoding.UTF8.GetString(decodedBytes);
+
+            string rawToken;
+            if (decodedString.Contains(':'))
+            {
+                var parts = decodedString.Split(':', 2);
+                if (parts[0] != userId)
+                    return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token no corresponde a este usuario." });
+                rawToken = parts[1];
+            }
+            else
+            {
+                rawToken = decodedString;
+            }
+
+            var result = await userManager.ResetPasswordAsync(user, rawToken, newPassword);
+            if (result.Succeeded)
+            {
+                user.IsActive = true;
+                user.UpdatedAt = DateTime.UtcNow;
+                await userManager.UpdateAsync(user);
+                await userManager.ResetAccessFailedCountAsync(user);
+                await userManager.SetLockoutEndDateAsync(user, null);
+                return result;
+            }
+
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token no es válido o ha expirado." });
+        }
+        catch
+        {
+            return IdentityResult.Failed(new IdentityError { Code = "InvalidToken", Description = "El token no es válido." });
         }
     }
 
