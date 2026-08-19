@@ -7,10 +7,12 @@ namespace Application.Interfaces.Services;
 
 public interface ICreditCardAppService
 {
+    Task<PagedResultDto<CreditCardDto>> GetCreditCardsPagedAsync(int page, int pageSize, string? status, string? identification);
+    Task<CreditCardDetailDto?> GetCreditCardDetailByIdAsync(Guid id);
     Task<IEnumerable<CreditCardDto>> GetCreditCardsAsync(string? status = null, string? cedula = null);
     Task<CreditCardDto?> GetCreditCardByIdAsync(Guid id);
     Task<IEnumerable<CreditCardTransactionDto>> GetTransactionsAsync(Guid cardId);
-    Task<(bool Success, string? Error)> AssignCreditCardAsync(AssignCreditCardDto dto);
+    Task<(bool Success, string? Error, CreditCardDto? Card)> AssignCreditCardAsync(AssignCreditCardDto dto);
     Task<(bool Success, string? Error)> UpdateCreditCardLimitAsync(Guid id, UpdateCreditCardLimitDto dto);
     Task<(bool Success, string? Error)> CancelCreditCardAsync(Guid id);
     Task<IEnumerable<CreditCardDto>> GetClientCardsAsync(Guid clientId);
