@@ -122,7 +122,7 @@ public class AuthAppServiceTests
         var result = await _authAppService.WebLoginAsync(new LoginDto { UserName = "cajero1", Password = "Pass123!" });
 
         Assert.True(result.Succeeded);
-        Assert.Equal("Cajero", result.RedirectController);
+        Assert.Equal("Cashier", result.RedirectController);
         Assert.Equal("Index", result.RedirectAction);
     }
 
@@ -138,7 +138,7 @@ public class AuthAppServiceTests
         var result = await _authAppService.WebLoginAsync(new LoginDto { UserName = "cliente1", Password = "Pass123!" });
 
         Assert.True(result.Succeeded);
-        Assert.Equal("Cliente", result.RedirectController);
+        Assert.Equal("Client", result.RedirectController);
         Assert.Equal("Index", result.RedirectAction);
     }
 
