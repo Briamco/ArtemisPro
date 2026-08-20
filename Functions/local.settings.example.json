@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "OverdueCheckCronSchedule": "0 0 0 * * *"
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Database=ArtemisPro;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True"
+  }
+}

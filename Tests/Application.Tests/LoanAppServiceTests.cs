@@ -177,4 +177,60 @@ public class LoanAppServiceTests
         Assert.Equal(22.5m, loan.AnnualInterestRate);
         _loans.Verify(l => l.Update(loan), Times.Once);
     }
+
+    [Fact]
+    public async Task ProcessOverdueInstallments_WithOverdueInstallments_MarksThemAsOverdueAndSaves()
+    {
+        var loanId = Guid.NewGuid();
+        var overdueInstallments = new List<LoanInstallment>
+        {
+            new LoanInstallment
+            {
+                Id = Guid.NewGuid(),
+                LoanId = loanId,
+                InstallmentNumber = 1,
+                DueDate = DateTime.UtcNow.AddDays(-5),
+                PaymentStatus = PaymentStatus.Pendiente,
+                IsOverdue = false,
+                Amount = 5000m,
+                PendingBalance = 5000m
+            },
+            new LoanInstallment
+            {
+                Id = Guid.NewGuid(),
+                LoanId = loanId,
+                InstallmentNumber = 2,
+                DueDate = DateTime.UtcNow.AddDays(-1),
+                PaymentStatus = PaymentStatus.Parcial,
+                IsOverdue = false,
+                Amount = 5000m,
+                PendingBalance = 2500m
+            }
+        };
+
+        _loanInstallments.Setup(li => li.GetUnmarkedOverdueInstallmentsAsync(It.IsAny<DateTime>()))
+            .ReturnsAsync(overdueInstallments);
+
+        var count = await _service.ProcessOverdueInstallmentsAsync();
+
+        Assert.Equal(2, count);
+        Assert.True(overdueInstallments[0].IsOverdue);
+        Assert.True(overdueInstallments[1].IsOverdue);
+        _loanInstallments.Verify(li => li.Update(It.IsAny<LoanInstallment>()), Times.Exactly(2));
+        _unitOfWork.Verify(u => u.SaveChangesAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessOverdueInstallments_NoOverdueInstallments_ReturnsZeroAndDoesNotSave()
+    {
+        _loanInstallments.Setup(li => li.GetUnmarkedOverdueInstallmentsAsync(It.IsAny<DateTime>()))
+            .ReturnsAsync(new List<LoanInstallment>());
+
+        var count = await _service.ProcessOverdueInstallmentsAsync();
+
+        Assert.Equal(0, count);
+        _loanInstallments.Verify(li => li.Update(It.IsAny<LoanInstallment>()), Times.Never);
+        _unitOfWork.Verify(u => u.SaveChangesAsync(), Times.Never);
+    }
 }
+

@@ -12,6 +12,20 @@ public class SavingsAccountRepository : BaseRepository<SavingsAccount>, ISavings
 {
     public SavingsAccountRepository(AppDbContext context) : base(context) { }
 
+    public override async Task<SavingsAccount?> GetByIdAsync(Guid id)
+    {
+        return await _context.SavingsAccounts
+            .Include(a => a.Client)
+            .FirstOrDefaultAsync(a => a.Id == id);
+    }
+
+    public override async Task<IEnumerable<SavingsAccount>> GetAllAsync()
+    {
+        return await _context.SavingsAccounts
+            .Include(a => a.Client)
+            .ToListAsync();
+    }
+
     public async Task<SavingsAccount?> GetByAccountNumberAsync(string accountNumber)
     {
         return await _context.SavingsAccounts

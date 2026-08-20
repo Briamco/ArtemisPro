@@ -102,6 +102,7 @@ public class AuthAppService(
     public async Task<WebLoginResult> WebLoginAsync(LoginDto dto)
     {
         var user = await userManager.FindByNameAsync(dto.UserName);
+        user ??= await userManager.FindByEmailAsync(dto.UserName);
         if (user == null)
             return new WebLoginResult { ErrorMessage = "Los datos de acceso son inválidos." };
 
@@ -121,8 +122,8 @@ public class AuthAppService(
         var (controller, action) = primaryRole switch
         {
             "Administrador" => ("Admin", "Index"),
-            "Cajero" => ("Cajero", "Index"),
-            "Cliente" => ("Cliente", "Index"),
+            "Cajero" => ("Cashier", "Index"),
+            "Cliente" => ("Client", "Index"),
             _ => ("Home", "Index")
         };
 

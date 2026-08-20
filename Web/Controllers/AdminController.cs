@@ -114,8 +114,8 @@ public class AdminController : Controller
         if (!ModelState.IsValid)
             return View(model);
 
-        var confirmationLinkFormat = Url.Action("ActivateAccount", "Account", new { email = "{0}", token = "{1}" }, Request.Scheme) 
-                                     ?? $"{Request.Scheme}://{Request.Host}/Account/ActivateAccount?email={{0}}&token={{1}}";
+        var confirmationLinkFormat = Url.Action("Activate", "Account", new { email = "{0}", token = "{1}" }, Request.Scheme) 
+                                     ?? $"{Request.Scheme}://{Request.Host}/Account/Activate?email={{0}}&token={{1}}";
 
         var dto = new Application.DTOs.Identity.CreateUserDto
         {
@@ -137,7 +137,7 @@ public class AdminController : Controller
         }
 
         TempData["SuccessMessage"] = "Usuario creado exitosamente.";
-        return RedirectToAction(nameof(UserManagement));
+        return RedirectToAction(nameof(Index));
     }
 
     //edit user
@@ -218,7 +218,7 @@ public class AdminController : Controller
         }
 
         TempData["SuccessMessage"] = "Usuario actualizado exitosamente.";
-        return RedirectToAction(nameof(UserManagement));
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
@@ -471,7 +471,7 @@ public class AdminController : Controller
         }
 
         TempData["SuccessMessage"] = "Préstamo asignado y desembolsado correctamente.";
-        return RedirectToAction(nameof(LoanManagement));
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
@@ -515,7 +515,7 @@ public class AdminController : Controller
         }
 
         TempData["SuccessMessage"] = "Préstamo de alto riesgo asignado y desembolsado bajo su autorización.";
-        return RedirectToAction(nameof(LoanManagement));
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpGet]
@@ -605,7 +605,7 @@ public class AdminController : Controller
         }
 
         TempData["SuccessMessage"] = "Tasa de interés actualizada y cuotas futuras recalculadas correctamente.";
-        return RedirectToAction(nameof(LoanManagement));
+        return RedirectToAction(nameof(Index));
     }
 
     // CREDIT CARD MANAGMENT
@@ -715,7 +715,7 @@ public class AdminController : Controller
         if(result.Success)
         {
             TempData["SuccessMessage"] = $"Tarjeta de crédito asignada exitosamente.";
-            return RedirectToAction(nameof(CreditCardManagement));
+            return RedirectToAction(nameof(Index));
         }
         else
         {
@@ -778,7 +778,7 @@ public class AdminController : Controller
         if (result.Success)
         {
             TempData["SuccessMessage"] = "Límite actualizado correctamente.";
-            return RedirectToAction(nameof(CreditCardManagement));
+            return RedirectToAction(nameof(Index));
         }
         else
         {
@@ -816,7 +816,7 @@ public class AdminController : Controller
         {
             TempData["ErrorMessage"] = result.Error;
         }
-        return RedirectToAction(nameof(CreditCardManagement));
+        return RedirectToAction(nameof(Index));
     }
 
     // ACCOUNT MANAGEMENT
@@ -964,7 +964,7 @@ public class AdminController : Controller
         }
 
         TempData["SuccessMessage"] = $"Cuenta de ahorro secundaria asignada correctamente.{(model.InitialBalance > 0 ? " Transacción de CRÉDITO inicial registrada." : "")}";
-        return RedirectToAction(nameof(SavingsAccountManagement));
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpGet]
@@ -1049,6 +1049,6 @@ public class AdminController : Controller
             TempData["ErrorMessage"] = result.Error;
         }
 
-        return RedirectToAction(nameof(SavingsAccountManagement));
+        return RedirectToAction(nameof(Index));
     }
 }

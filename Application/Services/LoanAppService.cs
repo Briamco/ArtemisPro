@@ -488,4 +488,26 @@ public class LoanAppService : ILoanAppService
         var clientLoans = loans.Where(l => l.ClientId == clientId);
         return _mapper.Map<IEnumerable<LoanDto>>(clientLoans);
     }
+
+    public async Task<int> ProcessOverdueInstallmentsAsync()
+    {
+        var overdueInstallments = await _unitOfWork.LoanInstallments
+            .GetUnmarkedOverdueInstallmentsAsync(DateTime.UtcNow);
+
+        var list = overdueInstallments.ToList();
+        if (!list.Any())
+        {
+            return 0;
+        }
+
+        foreach (var installment in list)
+        {
+            installment.IsOverdue = true;
+            _unitOfWork.LoanInstallments.Update(installment);
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+        return list.Count;
+    }
 }
+
