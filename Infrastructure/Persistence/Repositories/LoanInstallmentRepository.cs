@@ -29,6 +29,18 @@ public class LoanInstallmentRepository : BaseRepository<LoanInstallment>, ILoanI
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<LoanInstallment>> GetUnmarkedOverdueInstallmentsAsync(DateTime asOfDate)
+    {
+        return await _context.LoanInstallments
+            .Include(li => li.Loan)
+            .Where(li => li.Loan.Status == Domain.Enums.LoanStatus.Activo
+                      && li.PaymentStatus != Domain.Enums.PaymentStatus.Pagada
+                      && !li.IsOverdue
+                      && li.DueDate < asOfDate)
+            .ToListAsync();
+    }
+
+
     public async Task<decimal> GetTotalPendingDebtByClientIdAsync(Guid clientId)
     {
         var activeLoanIds = _context.Loans

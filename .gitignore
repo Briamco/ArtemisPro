@@ -6,6 +6,8 @@
 # dotenv files
 .env*
 !.env.example
+local.settings.json
+!local.settings.example.json
 
 # User-specific files
 *.rsuser

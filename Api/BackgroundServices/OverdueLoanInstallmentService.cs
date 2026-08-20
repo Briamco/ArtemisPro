@@ -1,9 +1,8 @@
-using Domain.Enums;
+using Application.Interfaces.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Application.Interfaces.Repositories;
+using Microsoft.Extensions.Logging;
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,11 +11,11 @@ namespace Api.BackgroundServices
     public class OverdueLoanInstallmentService : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
-        private readonly Microsoft.Extensions.Logging.ILogger<OverdueLoanInstallmentService> _logger;
+        private readonly ILogger<OverdueLoanInstallmentService> _logger;
 
         public OverdueLoanInstallmentService(
             IServiceProvider serviceProvider,
-            Microsoft.Extensions.Logging.ILogger<OverdueLoanInstallmentService> logger)
+            ILogger<OverdueLoanInstallmentService> logger)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
@@ -29,29 +28,22 @@ namespace Api.BackgroundServices
                 try
                 {
                     using var scope = _serviceProvider.CreateScope();
-                    var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-
-                    var pendingInstallments = await unitOfWork.LoanInstallments
-                        .FindAsync(i => i.PaymentStatus != PaymentStatus.Pagada && !i.IsOverdue && i.DueDate < DateTime.UtcNow);
-
-                    if (pendingInstallments.Any())
+                    var loanAppService = scope.ServiceProvider.GetRequiredService<ILoanAppService>();
+                    var processedCount = await loanAppService.ProcessOverdueInstallmentsAsync();
+                    if (processedCount > 0)
                     {
-                        foreach (var installment in pendingInstallments)
-                        {
-                            installment.IsOverdue = true;
-                            unitOfWork.LoanInstallments.Update(installment);
-                        }
-                        await unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Procesadas {Count} cuotas de préstamos vencidas.", processedCount);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error updating overdue installments");
+                    _logger.LogError(ex, "Error updating overdue installments in background service");
                 }
 
-                // Wait 24 hours or appropriate time before running again
+                // Wait 24 hours before running again
                 await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
             }
         }
     }
 }
+
